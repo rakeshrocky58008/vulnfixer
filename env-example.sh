@@ -1,0 +1,25 @@
+# Microsoft Copilot API Configuration
+COPILOT_API_KEY=your_copilot_api_key_here
+
+# Bitbucket Configuration
+BITBUCKET_USERNAME=your_bitbucket_username
+BITBUCKET_TOKEN=your_bitbucket_app_password
+
+# Application Settings
+LOG_LEVEL=INFO
+ENVIRONMENT=development
+MAX_FILE_SIZE=10485760
+
+# AI Settings
+LLM_MODEL=microsoft-copilot
+LLM_TEMPERATURE=0.1
+MAX_TOKENS=4000
+COPILOT_ENDPOINT=https://api.github.com/copilot
+
+# Repository Settings
+DEFAULT_BRANCH=main
+PR_BRANCH_PREFIX=vulnfixer
+SUPPORTED_REPOS=bitbucket,github
+
+# Optional: Skip configuration validation during development
+# SKIP_VALIDATION=true

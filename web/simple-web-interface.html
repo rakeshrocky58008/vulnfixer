@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛡️ VulnFixer - Automated Vulnerability Fixing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #7f8c8d;
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+
+        .badges {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .badge {
+            background: #3498db;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .badge.copilot {
+            background: #00d4ff;
+        }
+
+        .badge.bitbucket {
+            background: #0052cc;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        input[type="file"],
+        input[type="url"],
+        input[type="password"],
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #ecf0f1;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="checkbox"] {
+            transform: scale(1.2);
+        }
+
+        .submit-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(52, 152, 219, 0.3);
+        }
+
+        .submit-btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .progress {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .info-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .info-section h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+
+        .info-section ul {
+            color: #5a6c7d;
+            margin-left: 20px;
+        }
+
+        .info-section li {
+            margin-bottom: 5px;
+        }
+
+        .links {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .links a {
+            color: #3498db;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: 500;
+        }
+
+        .links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ VulnFixer</h1>
+            <p>Automated Security Vulnerability Fixing with Microsoft Copilot</p>
+            <div class="badges">
+                <span class="badge copilot">Microsoft Copilot</span>
+                <span class="badge bitbucket">Bitbucket</span>
+                <span class="badge">Open Source</span>
+            </div>
+        </div>
+
+        <form id="vulnForm">
+            <div class="form-group">
+                <label for="reportFile">📄 Upload Vulnerability Report</label>
+                <input type="file" id="reportFile" name="report_file" accept=".json,.xml" required>
+                <small style="color: #7f8c8d;">Supported: BlackDuck, OWASP Dependency Check</small>
+            </div>
+
+            <div class="form-group">
+                <label for="repoUrl">🔗 Bitbucket Repository URL</label>
+                <input type="url" id="repoUrl" name="repo_url" placeholder="https://bitbucket.org/workspace/repository" required>
+            </div>
+
+            <div class="form-group">
+                <label for="repoToken">🔑 Bitbucket App Password (Optional)</label>
+                <input type="password" id="repoToken" name="repo_token" placeholder="Leave empty if configured in environment">
+                <small style="color: #7f8c8d;">Required for private repositories</small>
+            </div>
+
+            <div class="form-group">
+                <label for="branchName">🌿 Custom Branch Name (Optional)</label>
+                <input type="text" id="branchName" name="branch_name" placeholder="vulnfixer-fixes-auto">
+            </div>
+
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="createPr" name="create_pr" checked>
+                    <label for="createPr">Create Pull Request automatically</label>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+                🚀 Fix Vulnerabilities
+            </button>
+        </form>
+
+        <div class="progress" id="progress">
+            <div class="spinner"></div>
+            <p>Processing vulnerabilities with Microsoft Copilot...</p>
+        </div>
+
+        <div class="result" id="result"></div>
+
+        <div class="info-section">
+            <h3>📋 How it works:</h3>
+            <ul>
+                <li>Upload your BlackDuck or OWASP vulnerability report</li>
+                <li>Provide your Bitbucket repository URL</li>
+                <li>Microsoft Copilot analyzes and generates fixes</li>
+                <li>Automated pull request created with security fixes</li>
+                <li>Review and merge the fixes</li>
+            </ul>
+        </div>
+
+        <div class="links">
+            <a href="/api/docs" target="_blank">📚 API Documentation</a>
+            <a href="https://github.com/yourusername/vulnfixer" target="_blank">⭐ GitHub Repository</a>
+            <a href="/api/supported-formats" target="_blank">📝 Supported Formats</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('vulnForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const progress = document.getElementById('progress');
+            const result = document.getElementById('result');
+            
+            // Show progress, hide result
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+            progress.style.display = 'block';
+            result.style.display = 'none';
+            
+            try {
+                const formData = new FormData(this);
+                
+                const response = await fetch('/api/fix-vulnerabilities', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.className = 'result success';
+                    result.innerHTML = `
+                        <h4>✅ Success!</h4>
+                        <p><strong>Fixes Applied:</strong> ${data.fixes_applied}/${data.vulnerabilities_found}</p>
+                        <p><strong>Processing Time:</strong> ${data.processing_time ? data.processing_time.toFixed(2) + 's' : 'N/A'}</p>
+                        ${data.pr_url ? `<p><strong>Pull Request:</strong> <a href="${data.pr_url}" target="_blank">View PR</a></p>` : ''}
+                        ${data.branch_name ? `<p><strong>Branch:</strong> ${data.branch_name}</p>` : ''}
+                        <p><strong>Message:</strong> ${data.message}</p>
+                    `;
+                } else {
+                    result.className = 'result error';
+                    result.innerHTML = `
+                        <h4>❌ Error</h4>
+                        <p>${data.detail || data.message || 'An error occurred while processing vulnerabilities.'}</p>
+                    `;
+                }
+                
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `
+                    <h4>❌ Network Error</h4>
+                    <p>Failed to connect to the server. Please try again later.</p>
+                    <p><small>${error.message}</small></p>
+                `;
+            } finally {
+                // Hide progress, show result
+                progress.style.display = 'none';
+                result.style.display = 'block';
+                
+                // Reset button
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 Fix Vulnerabilities';
+            }
+        });
+
+        // File validation
+        document.getElementById('reportFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const allowedTypes = ['application/json', 'text/xml', 'application/xml'];
+                if (!allowedTypes.includes(file.type) && !file.name.endsWith('.json') && !file.name.endsWith('.xml')) {
+                    alert('Please upload a JSON or XML file (BlackDuck, OWASP Dependency Check)');
+                    e.target.value = '';
+                }
+                
+                if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                    alert('File size must be less than 10MB');
+                    e.target.value = '';
+                }
+            }
+        });
+
+        // Repository URL validation
+        document.getElementById('repoUrl').addEventListener('blur', function(e) {
+            const url = e.target.value;
+            if (url && !url.includes('bitbucket.org')) {
+                alert('Please provide a valid Bitbucket repository URL (e.g., https://bitbucket.org/workspace/repository)');
+            }
+        });
+    </script>
+</body>
+</html>
