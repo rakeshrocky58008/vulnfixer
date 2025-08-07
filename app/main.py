@@ -70,19 +70,20 @@ async def root():
         <div class="container">
             <div class="logo">
                 <h1>🛡️ VulnFixer</h1>
-                <p>Open Source Vulnerability Fix Automation</p>
+                <p>Open Source Vulnerability Fix Automation with Local AI</p>
             </div>
             <div class="links">
                 <a href="/api/docs">API Documentation</a>
                 <a href="https://github.com/yourusername/vulnfixer">GitHub Repository</a>
             </div>
             <div style="margin-top: 40px;">
-                <h3>Quick Start:</h3>
-                <ol>
+                <h3>🦙 Powered by Local Ollama AI:</h3>
+                <ul>
                     <li>Upload your vulnerability report</li>
-                    <li>Provide your GitHub repository URL</li>
-                    <li>Get automated fixes via Pull Request</li>
-                </ol>
+                    <li>Provide your Bitbucket repository URL</li>
+                    <li>Local AI generates secure fixes (no API keys needed!)</li>
+                    <li>Automated pull request created</li>
+                </ul>
             </div>
         </div>
     </body>
