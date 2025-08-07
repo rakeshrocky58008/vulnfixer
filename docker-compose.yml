@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Ollama AI Service (Separate Container)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: vulnfixer-ollama-dev
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_PORT=11434
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - vulnfixer-network
+    restart: unless-stopped
+    command: >
+      bash -c "
+        ollama serve &
+        sleep 30
+        ollama pull codellama:7b
+        ollama pull deepseek-coder:6.7b
+        wait
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # VulnFixer Application
+  vulnfixer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vulnfixer-app-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - USE_OLLAMA=true
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=codellama:7b
+      - OLLAMA_TIMEOUT=180
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=development
+    volumes:
+      - ./logs:/app/logs
+      - /tmp/vulnfixer:/tmp/vulnfixer
+    networks:
+      - vulnfixer-network
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  ollama_data:
+    driver: local
+
+networks:
+  vulnfixer-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
