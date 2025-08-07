@@ -1,35 +1,29 @@
 """
-Main Vulnerability Fixing AI Agent using Microsoft Copilot
+Main Vulnerability Fixing AI Agent using Local Ollama
+Completely local AI processing - no API keys needed!
 """
 
 import logging
 import tempfile
 import time
+import os
 from typing import Dict, List, Optional
 
 from app.config import settings
 from agents.tools.parsers import VulnerabilityParser
 from agents.tools.bitbucket_helper import BitbucketHelper
-from agents.tools.copilot_client import CopilotClient, CopilotChatClient
-from agents.tools.fix_generator import FixGenerator, List, Optional
-
-from app.config import settings
-from agents.tools.parsers import VulnerabilityParser
-from agents.tools.git_helper import GitHelper
-from agents.tools.fix_generator import FixGenerator
+from agents.tools.ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
 
 class VulnerabilityAgent:
-    """Main agent that coordinates vulnerability fixing process using Microsoft Copilot"""
+    """Main agent that coordinates vulnerability fixing process using local Ollama"""
     
     def __init__(self):
         """Initialize the vulnerability fixing agent"""
         self.parser = VulnerabilityParser()
         self.bitbucket_helper = BitbucketHelper()
-        self.copilot_client = CopilotClient()
-        self.copilot_chat = CopilotChatClient()
-        self.fix_generator = FixGenerator()
+        self.ollama_client = OllamaClient()
     
     async def process_vulnerability_fix(
         self,
@@ -40,14 +34,40 @@ class VulnerabilityAgent:
         branch_name: Optional[str] = None
     ) -> Dict:
         """
-        Main method to process vulnerability fixes
+        Main method to process vulnerability fixes using local Ollama
         """
         start_time = time.time()
         
         try:
             logger.info(f"Starting vulnerability fix process for {repo_url}")
             
-            # Step 1: Parse vulnerability report
+            # Step 1: Check Ollama availability
+            ollama_status = await self.ollama_client.check_model_availability()
+            if not ollama_status.get("ollama_running"):
+                return {
+                    "message": "Ollama is not running. Please start Ollama first.",
+                    "fixes_applied": 0,
+                    "vulnerabilities_found": 0,
+                    "error": "Ollama not available",
+                    "instructions": [
+                        "1. Install Ollama: https://ollama.ai",
+                        "2. Run: ollama serve",
+                        f"3. Pull model: ollama pull {settings.OLLAMA_MODEL}"
+                    ]
+                }
+            
+            if not ollama_status.get("model_available"):
+                logger.info(f"Pulling model {settings.OLLAMA_MODEL}...")
+                pull_result = await self.ollama_client.pull_model()
+                if not pull_result.get("success"):
+                    return {
+                        "message": f"Failed to pull model {settings.OLLAMA_MODEL}",
+                        "fixes_applied": 0,
+                        "vulnerabilities_found": 0,
+                        "error": pull_result.get("error")
+                    }
+            
+            # Step 2: Parse vulnerability report
             logger.info("Parsing vulnerability report...")
             vulnerabilities = await self.analyze_report(report_path)
             
@@ -60,7 +80,7 @@ class VulnerabilityAgent:
             
             logger.info(f"Found {len(vulnerabilities)} vulnerabilities")
             
-            # Step 2: Determine repository type and clone
+            # Step 3: Determine repository type and clone
             repo_type = self._determine_repo_type(repo_url)
             logger.info(f"Detected repository type: {repo_type}")
             
@@ -74,13 +94,13 @@ class VulnerabilityAgent:
                     # GitHub support can be added later
                     raise NotImplementedError("GitHub support not implemented yet")
                 
-                # Step 3: Generate and apply fixes using Microsoft Copilot
+                # Step 4: Generate and apply fixes using local Ollama
                 fixes_applied = 0
                 successful_fixes = []
                 
-                for vuln in vulnerabilities:
+                for i, vuln in enumerate(vulnerabilities, 1):
                     try:
-                        logger.info(f"Processing vulnerability: {vuln.get('name', vuln.get('id'))}")
+                        logger.info(f"Processing vulnerability {i}/{len(vulnerabilities)}: {vuln.get('name', vuln.get('id'))}")
                         
                         fix_result = await self._apply_vulnerability_fix(vuln, temp_dir)
                         
@@ -90,15 +110,15 @@ class VulnerabilityAgent:
                                 'vulnerability': vuln,
                                 'fix': fix_result
                             })
-                            logger.info(f"Successfully fixed: {vuln.get('name', vuln.get('id'))}")
+                            logger.info(f"✅ Fixed: {vuln.get('name', vuln.get('id'))}")
                         else:
-                            logger.warning(f"Could not fix: {vuln.get('name', vuln.get('id'))} - {fix_result.get('reason')}")
+                            logger.warning(f"❌ Could not fix: {vuln.get('name', vuln.get('id'))} - {fix_result.get('reason')}")
                     
                     except Exception as e:
                         logger.error(f"Error processing vulnerability {vuln.get('id')}: {str(e)}")
                         continue
                 
-                # Step 4: Create pull request if fixes were applied
+                # Step 5: Create pull request if fixes were applied
                 pr_url = None
                 final_branch_name = None
                 
@@ -114,7 +134,7 @@ class VulnerabilityAgent:
                     push_result = await self.bitbucket_helper.push_changes(
                         temp_dir,
                         branch_name,
-                        f"Fix {fixes_applied} security vulnerabilities\n\nAutomated fixes generated by VulnFixer using Microsoft Copilot",
+                        f"🛡️ Fix {fixes_applied} security vulnerabilities\n\nAutomated fixes generated by VulnFixer using local Ollama AI ({settings.OLLAMA_MODEL})",
                         files_changed
                     )
                     
@@ -124,7 +144,7 @@ class VulnerabilityAgent:
                             repo_name,
                             branch_name,
                             target_branch="main",
-                            title=f"🛡️ Fix {fixes_applied} Security Vulnerabilities",
+                            title=f"🛡️ Fix {fixes_applied} Security Vulnerabilities (Ollama AI)",
                             description=self._generate_pr_description(successful_fixes),
                             fixes_applied=successful_fixes
                         )
@@ -134,13 +154,14 @@ class VulnerabilityAgent:
                 processing_time = time.time() - start_time
                 
                 return {
-                    "message": f"Successfully processed {fixes_applied}/{len(vulnerabilities)} vulnerabilities",
+                    "message": f"Successfully processed {fixes_applied}/{len(vulnerabilities)} vulnerabilities using local Ollama",
                     "fixes_applied": fixes_applied,
                     "vulnerabilities_found": len(vulnerabilities),
                     "pr_url": pr_url,
                     "branch_name": final_branch_name,
                     "processing_time": processing_time,
-                    "successful_fixes": [f['vulnerability']['name'] for f in successful_fixes]
+                    "successful_fixes": [f['vulnerability']['name'] for f in successful_fixes],
+                    "model_used": settings.OLLAMA_MODEL
                 }
         
         except Exception as e:
@@ -159,7 +180,7 @@ class VulnerabilityAgent:
     
     async def _apply_vulnerability_fix(self, vulnerability: Dict, repo_path: str) -> Dict:
         """
-        Apply fix for a single vulnerability using Microsoft Copilot
+        Apply fix for a single vulnerability using local Ollama
         """
         try:
             vuln_type = vulnerability.get('type', 'unknown')
@@ -185,7 +206,7 @@ class VulnerabilityAgent:
     
     async def _fix_dependency_vulnerability(self, vulnerability: Dict, repo_path: str) -> Dict:
         """
-        Fix dependency-related vulnerabilities using Microsoft Copilot
+        Fix dependency-related vulnerabilities using local Ollama
         """
         try:
             # Find dependency files (pom.xml, package.json, requirements.txt, etc.)
@@ -197,45 +218,51 @@ class VulnerabilityAgent:
                     'reason': 'No dependency files found'
                 }
             
-            async with self.copilot_client as copilot:
-                for dep_file in dep_files:
-                    file_path = os.path.join(repo_path, dep_file)
+            for dep_file in dep_files:
+                file_path = os.path.join(repo_path, dep_file)
+                
+                if not os.path.exists(file_path):
+                    continue
+                
+                # Read current file content
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    current_content = f.read()
+                
+                # Check if this file contains the vulnerable dependency
+                component_name = vulnerability.get('component', '')
+                if component_name.lower() not in current_content.lower():
+                    continue
+                
+                # Determine build file type
+                build_type = self._get_build_file_type(dep_file)
+                
+                # Generate fix using local Ollama
+                logger.info(f"Using Ollama model {settings.OLLAMA_MODEL} to fix dependency vulnerability...")
+                fix_result = await self.ollama_client.generate_dependency_update(
+                    vulnerability,
+                    current_content,
+                    build_type
+                )
+                
+                if fix_result["success"]:
+                    # Apply the fix
+                    updated_content = fix_result["updated_content"]
                     
-                    if not os.path.exists(file_path):
-                        continue
+                    # Clean up the content (remove markdown formatting if present)
+                    updated_content = self._clean_generated_content(updated_content)
                     
-                    # Read current file content
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        current_content = f.read()
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(updated_content)
                     
-                    # Check if this file contains the vulnerable dependency
-                    component_name = vulnerability.get('component', '')
-                    if component_name.lower() not in current_content.lower():
-                        continue
-                    
-                    # Determine build file type
-                    build_type = self._get_build_file_type(dep_file)
-                    
-                    # Generate fix using Copilot
-                    fix_result = await copilot.generate_dependency_update(
-                        vulnerability,
-                        current_content,
-                        build_type
-                    )
-                    
-                    if fix_result["success"]:
-                        # Apply the fix
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(fix_result["updated_content"])
-                        
-                        return {
-                            'success': True,
-                            'file_path': dep_file,
-                            'fix_type': 'dependency_update',
-                            'reasoning': fix_result["reasoning"],
-                            'old_version': fix_result.get("old_version"),
-                            'new_version': fix_result.get("new_version")
-                        }
+                    return {
+                        'success': True,
+                        'file_path': dep_file,
+                        'fix_type': 'dependency_update',
+                        'reasoning': fix_result["reasoning"],
+                        'old_version': fix_result.get("old_version"),
+                        'new_version': fix_result.get("new_version"),
+                        'model_used': fix_result.get("model_used")
+                    }
             
             return {
                 'success': False,
@@ -248,14 +275,14 @@ class VulnerabilityAgent:
     
     async def _fix_code_vulnerability(self, vulnerability: Dict, repo_path: str) -> Dict:
         """
-        Fix code-level vulnerabilities using Microsoft Copilot Chat
+        Fix code-level vulnerabilities using local Ollama
         """
         try:
             # Find relevant source files
             source_files = self._find_source_files(repo_path)
             
-            # Use Copilot Chat for more complex code fixes
-            for source_file in source_files[:5]:  # Limit to first 5 files to avoid excessive API calls
+            # Process first 3 files to avoid excessive processing
+            for source_file in source_files[:3]:
                 file_path = os.path.join(repo_path, source_file)
                 
                 if not os.path.exists(file_path):
@@ -264,18 +291,32 @@ class VulnerabilityAgent:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     code_content = f.read()
                 
-                # Use Copilot Chat for conversational fix generation
-                fix_result = await self.copilot_chat.generate_fix_with_chat(
+                # Check if this file might contain the vulnerability
+                vuln_keywords = [
+                    vulnerability.get('name', '').lower(),
+                    vulnerability.get('type', '').lower(),
+                    'sql', 'injection', 'xss', 'csrf'  # Common vulnerability patterns
+                ]
+                
+                if not any(keyword in code_content.lower() for keyword in vuln_keywords if keyword):
+                    continue
+                
+                # Get file type
+                file_extension = os.path.splitext(source_file)[1].lstrip('.')
+                
+                # Use local Ollama for code fix generation
+                logger.info(f"Using Ollama model {settings.OLLAMA_MODEL} to fix code vulnerability...")
+                fix_result = await self.ollama_client.generate_vulnerability_fix(
                     vulnerability,
-                    code_content
+                    code_content,
+                    file_extension
                 )
                 
                 if fix_result["success"]:
-                    # Parse the response to extract fixed code
-                    response_text = fix_result["response"]
-                    fixed_code = self._extract_fixed_code(response_text)
+                    # Parse and clean the response
+                    fixed_code = self._extract_code_from_response(fix_result["fix_content"])
                     
-                    if fixed_code:
+                    if fixed_code and len(fixed_code.strip()) > 10:  # Ensure we got actual code
                         with open(file_path, 'w', encoding='utf-8') as f:
                             f.write(fixed_code)
                         
@@ -283,8 +324,9 @@ class VulnerabilityAgent:
                             'success': True,
                             'file_path': source_file,
                             'fix_type': 'code_fix',
-                            'reasoning': 'Fixed using Microsoft Copilot Chat',
-                            'method': 'copilot_chat'
+                            'reasoning': fix_result["reasoning"],
+                            'model_used': fix_result.get("model_used"),
+                            'confidence': fix_result.get("confidence")
                         }
             
             return {
@@ -305,6 +347,73 @@ class VulnerabilityAgent:
             'success': False,
             'reason': 'Configuration vulnerability fixes not implemented yet'
         }
+    
+    def _clean_generated_content(self, content: str) -> str:
+        """
+        Clean up AI-generated content by removing markdown formatting
+        """
+        lines = content.split('\n')
+        cleaned_lines = []
+        in_code_block = False
+        
+        for line in lines:
+            # Skip markdown code block markers
+            if line.strip().startswith('```'):
+                in_code_block = not in_code_block
+                continue
+            
+            # If we're in a code block or this looks like actual code/config content
+            if in_code_block or self._looks_like_code(line):
+                cleaned_lines.append(line)
+            elif not in_code_block and line.strip():
+                # Outside code blocks, only keep lines that look like file content
+                if any(marker in line.lower() for marker in ['<', '>', '{', '}', '=', ':']):
+                    cleaned_lines.append(line)
+        
+        return '\n'.join(cleaned_lines)
+    
+    def _looks_like_code(self, line: str) -> bool:
+        """
+        Check if a line looks like code/configuration content
+        """
+        code_indicators = [
+            '<', '>', '{', '}', '[', ']', '=', ':', ';',
+            'import ', 'public ', 'private ', 'class ',
+            'def ', 'function ', 'var ', 'let ', 'const ',
+            '<?xml', '<!DOCTYPE', '<dependency>', '<version>'
+        ]
+        
+        return any(indicator in line for indicator in code_indicators)
+    
+    def _extract_code_from_response(self, response: str) -> Optional[str]:
+        """
+        Extract code from AI response, handling various formats
+        """
+        try:
+            lines = response.split('\n')
+            code_lines = []
+            in_code_block = False
+            
+            for line in lines:
+                if line.strip().startswith('```'):
+                    in_code_block = not in_code_block
+                    continue
+                
+                if in_code_block or self._looks_like_code(line):
+                    code_lines.append(line)
+            
+            if code_lines:
+                return '\n'.join(code_lines)
+            
+            # If no code blocks found, return the entire response if it looks like code
+            if self._looks_like_code(response):
+                return response
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error extracting code from response: {str(e)}")
+            return None
     
     def _determine_repo_type(self, repo_url: str) -> str:
         """
@@ -376,41 +485,13 @@ class VulnerabilityAgent:
         
         return type_mapping.get(os.path.basename(file_name), 'unknown')
     
-    def _extract_fixed_code(self, response_text: str) -> Optional[str]:
-        """
-        Extract fixed code from Copilot response
-        """
-        try:
-            # Look for code blocks in the response
-            lines = response_text.split('\n')
-            code_lines = []
-            in_code_block = False
-            
-            for line in lines:
-                if line.strip().startswith('```'):
-                    in_code_block = not in_code_block
-                    continue
-                
-                if in_code_block:
-                    code_lines.append(line)
-            
-            if code_lines:
-                return '\n'.join(code_lines)
-            
-            # If no code blocks found, return the entire response as potential code
-            return response_text
-            
-        except Exception as e:
-            logger.error(f"Error extracting fixed code: {str(e)}")
-            return None
-    
     def _generate_pr_description(self, successful_fixes: List[Dict]) -> str:
         """
         Generate detailed pull request description
         """
-        description = """# 🛡️ Automated Security Vulnerability Fixes
+        description = f"""# 🛡️ Automated Security Vulnerability Fixes (Ollama AI)
 
-This pull request contains automated fixes for security vulnerabilities generated by VulnFixer using Microsoft Copilot.
+This pull request contains automated fixes for security vulnerabilities generated by VulnFixer using local Ollama AI model: **{settings.OLLAMA_MODEL}**.
 
 ## 📋 Summary of Changes
 
@@ -418,15 +499,17 @@ This pull request contains automated fixes for security vulnerabilities generate
         
         for fix in successful_fixes:
             vuln = fix.get('vulnerability', {})
+            fix_info = fix.get('fix', {})
             description += f"""### {vuln.get('name', 'Unknown Vulnerability')}
 - **Severity**: {vuln.get('severity', 'Unknown')}
 - **Type**: {vuln.get('type', 'Unknown')}
-- **File**: `{fix.get('file_path', 'Unknown')}`
-- **Fix**: {fix.get('reasoning', 'Applied security fix')}
+- **File**: `{fix_info.get('file_path', 'Unknown')}`
+- **Fix**: {fix_info.get('reasoning', 'Applied security fix')}
+- **Model Used**: {fix_info.get('model_used', settings.OLLAMA_MODEL)}
 
 """
         
-        description += """## 🔍 Verification
+        description += f"""## 🔍 Verification
 
 Please review the changes and ensure they don't break existing functionality. Consider running:
 - Unit tests
@@ -435,11 +518,21 @@ Please review the changes and ensure they don't break existing functionality. Co
 - Manual testing of affected features
 
 ## 🤖 Generated by VulnFixer
-This PR was automatically generated by VulnFixer using Microsoft Copilot AI.
+- **AI Model**: {settings.OLLAMA_MODEL} (local Ollama)
+- **Processing**: Completely local - no external API calls
+- **Privacy**: Your code never left your environment
+- **Cost**: Free - no API fees incurred
+
+## 🦙 About Local AI Processing
+This PR was generated using local Ollama AI, ensuring:
+- ✅ Complete privacy and security
+- ✅ No API rate limits or costs
+- ✅ Offline processing capabilities
+- ✅ Full control over the AI model
 """
         
         return description
     
     def get_model_info(self) -> str:
         """Get information about the AI model being used"""
-        return f"Microsoft Copilot (temperature: {settings.LLM_TEMPERATURE})"
+        return f"Local Ollama: {settings.OLLAMA_MODEL} (temperature: {settings.LLM_TEMPERATURE})"
