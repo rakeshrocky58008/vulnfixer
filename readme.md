@@ -1,72 +1,79 @@
 # 🛡️ VulnFixer
 
-**Open Source Automated Vulnerability Fixing with Microsoft Copilot & Bitbucket**
+**Open Source Automated Vulnerability Fixing with Local Ollama AI & Bitbucket**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-009688.svg)](https://fastapi.tiangolo.com)
-[![Microsoft Copilot](https://img.shields.io/badge/AI-Microsoft%20Copilot-00d4ff.svg)](https://copilot.github.com)
+[![Ollama](https://img.shields.io/badge/AI-Local%20Ollama-00ff88.svg)](https://ollama.ai)
 [![Bitbucket](https://img.shields.io/badge/Git-Bitbucket-0052cc.svg)](https://bitbucket.org)
 
-> Automatically analyze security vulnerability reports and generate fixes using Microsoft Copilot AI, with seamless Bitbucket integration for automated pull requests.
+> Automatically analyze security vulnerability reports and generate fixes using **local Ollama AI** - completely free, private, and no API keys needed!
 
 ## ✨ Features
 
-- 🤖 **Microsoft Copilot Integration** - Leverage advanced AI for intelligent vulnerability fixes
-- 📊 **Multiple Report Formats** - Support for BlackDuck, OWASP Dependency Check, Snyk
+- 🦙 **Local Ollama AI** - No API keys, no costs, 100% private processing
+- 📊 **Multiple Report Formats** - BlackDuck, OWASP Dependency Check, Snyk
 - 🔧 **Bitbucket Integration** - Automated cloning, fixing, and pull request creation
-- 🚀 **Fast Processing** - Simple architecture designed for 1-week MVP deployment
-- 🌐 **Web Interface** - Clean, modern UI for easy vulnerability management
-- 📱 **REST API** - Complete API for integration with CI/CD pipelines
-- 🔒 **Security First** - Minimal, targeted fixes that preserve functionality
+- 🚀 **Fast & Free** - No rate limits, no subscription costs
+- 🌐 **Modern Web Interface** - Clean, responsive UI for easy vulnerability management
+- 📱 **REST API** - Complete API for CI/CD pipeline integration
+- 🔒 **Privacy First** - Your code never leaves your machine
+- 🌍 **Works Offline** - No internet required after initial setup
 
-## 🚀 Quick Start
+## 🎯 Why Ollama Integration is Revolutionary
+
+### **Traditional Solutions vs VulnFixer**
+
+| Feature | VulnFixer (Ollama) | GPT-4/Copilot APIs |
+|---------|-------------------|-------------------|
+| **Cost** | 🟢 **FREE** | 🔴 $0.02-0.03/1K tokens |
+| **Privacy** | 🟢 **100% Local** | 🔴 Code sent to external servers |
+| **Rate Limits** | 🟢 **None** | 🔴 Limited requests/minute |
+| **Setup** | 🟢 **No API Keys** | 🔴 Requires API subscriptions |
+| **Offline** | 🟢 **Works Offline** | 🔴 Internet required |
+| **Enterprise** | 🟢 **Air-gap friendly** | 🔴 External dependencies |
+
+## 🚀 Quick Start (5 Minutes)
 
 ### Prerequisites
 - Python 3.8+
-- Microsoft Copilot API access
-- Bitbucket account with app password
+- Ollama installed
+- Bitbucket account (for repository operations)
 
-### 1. Installation
-
+### 1. Install Ollama
 ```bash
-# Clone the repository
+# Linux/Mac
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Start Ollama server
+ollama serve
+
+# Pull CodeLlama model (optimized for code)
+ollama pull codellama:7b
+```
+
+### 2. Setup VulnFixer
+```bash
+# Clone repository
 git clone https://github.com/yourusername/vulnfixer.git
 cd vulnfixer
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Copy environment template
+# Configure environment
 cp .env.example .env
-```
-
-### 2. Configuration
-
-Edit `.env` file with your credentials:
-
-```env
-# Microsoft Copilot API Configuration
-COPILOT_API_KEY=your_copilot_api_key_here
-
-# Bitbucket Configuration
-BITBUCKET_USERNAME=your_bitbucket_username
-BITBUCKET_TOKEN=your_bitbucket_app_password
-
-# Application Settings
-LOG_LEVEL=INFO
-ENVIRONMENT=development
+# Edit .env with your Bitbucket credentials (Ollama needs no API keys!)
 ```
 
 ### 3. Run the Application
-
 ```bash
 # Start the server
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 4. Access the Application
-
 - **Web Interface**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/api/docs
 - **Health Check**: http://localhost:8000/health
@@ -74,14 +81,12 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ## 📋 Usage
 
 ### Web Interface
-
 1. **Upload Report**: Drag & drop your vulnerability report (JSON/XML)
-2. **Repository URL**: Enter your Bitbucket repository URL
+2. **Repository URL**: Enter your Bitbucket repository URL  
 3. **Configure**: Set branch name and options
-4. **Fix**: Click "Fix Vulnerabilities" and let Copilot work its magic!
+4. **Fix**: Click "Fix Vulnerabilities" and watch local Ollama AI work!
 
 ### API Usage
-
 ```bash
 curl -X POST "http://localhost:8000/api/fix-vulnerabilities" \
      -F "report_file=@blackduck_report.json" \
@@ -91,27 +96,60 @@ curl -X POST "http://localhost:8000/api/fix-vulnerabilities" \
 ```
 
 ### Response Format
-
 ```json
 {
   "status": "success",
-  "message": "Successfully processed 5/8 vulnerabilities",
+  "message": "Successfully processed 5/8 vulnerabilities using local Ollama",
   "fixes_applied": 5,
   "vulnerabilities_found": 8,
   "pr_url": "https://bitbucket.org/workspace/repo/pull-requests/42",
   "branch_name": "vulnfixer-fixes-1699123456",
-  "processing_time": 23.45
+  "processing_time": 23.45,
+  "model_used": "codellama:7b"
 }
 ```
 
+## 🦙 Ollama Model Options
+
+### **CodeLlama 7B** (Recommended for MVP)
+```bash
+ollama pull codellama:7b
+```
+- **RAM**: 4GB required
+- **Best for**: General vulnerability fixing, fast processing
+- **Quality**: Excellent for most common vulnerabilities
+
+### **DeepSeek Coder 6.7B** (Most Efficient)
+```bash
+ollama pull deepseek-coder:6.7b
+```
+- **RAM**: 3.5GB required
+- **Best for**: Resource-constrained environments
+- **Quality**: Very good coding capabilities, faster than CodeLlama
+
+### **CodeLlama 13B** (Better Quality)
+```bash
+ollama pull codellama:13b
+```
+- **RAM**: 8GB required
+- **Best for**: Production environments with more RAM
+- **Quality**: Higher accuracy for complex vulnerability patterns
+
+### **Phind-CodeLlama 34B** (Enterprise Grade)
+```bash
+ollama pull phind-codellama:34b
+```
+- **RAM**: 16GB+ required
+- **Best for**: Enterprise deployments, highest accuracy
+- **Quality**: Best-in-class code understanding and generation
+
 ## 🏗️ Architecture
 
-### Simple & Effective Design
-
+### Simple & Powerful Design
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Web/API       │───▶│  Vulnerability   │───▶│  Microsoft      │
-│   Interface     │    │  Parser          │    │  Copilot        │
+│   Web/API       │───▶│  Vulnerability   │───▶│  Local Ollama   │
+│   Interface     │    │  Parser          │    │  AI Engine      │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
@@ -128,28 +166,28 @@ curl -X POST "http://localhost:8000/api/fix-vulnerabilities" \
 ```
 
 ### Tech Stack
-
 - **Backend**: FastAPI + Python 3.8+
-- **AI**: Microsoft Copilot API
-- **Git**: Bitbucket API + GitPython
-- **Frontend**: Vanilla HTML/CSS/JavaScript
+- **AI Engine**: Local Ollama with CodeLlama
+- **Git**: Bitbucket API + GitPython  
+- **Frontend**: Modern HTML5/CSS3/JavaScript
 - **Parsing**: Native JSON/XML parsers
+- **Privacy**: 100% local processing
 
 ## 📊 Supported Formats
 
 ### Vulnerability Reports
-- **BlackDuck** - JSON format with components and vulnerabilities
+- **BlackDuck** - Enterprise security scanning reports
 - **OWASP Dependency Check** - JSON and XML formats
-- **Snyk** - JSON vulnerability reports
-- **Generic** - Custom JSON format with standard fields
+- **Snyk** - Developer security platform reports
+- **Generic JSON** - Custom vulnerability report formats
 
-### Repository Types
+### Repository Types  
 - **Bitbucket** - Full support with automated PR creation
-- **GitHub** - Planned for future release
+- **GitHub** - Coming soon
 
 ### Languages & Build Systems
 - **Java** - Maven (pom.xml), Gradle (build.gradle)
-- **JavaScript/Node.js** - npm (package.json)
+- **JavaScript/Node.js** - npm (package.json) 
 - **Python** - pip (requirements.txt), Pipenv (Pipfile)
 - **C#/.NET** - NuGet packages
 - **Go** - Go modules (go.mod)
@@ -157,137 +195,152 @@ curl -X POST "http://localhost:8000/api/fix-vulnerabilities" \
 
 ## 🔧 Configuration
 
-### Environment Variables
+### Environment Variables (.env)
+```env
+# 🦙 LOCAL OLLAMA (No API keys needed!)
+USE_OLLAMA=true
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=codellama:7b
+OLLAMA_TIMEOUT=120
 
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `COPILOT_API_KEY` | Microsoft Copilot API key | ✅ | - |
-| `BITBUCKET_USERNAME` | Your Bitbucket username | ✅ | - |
-| `BITBUCKET_TOKEN` | Bitbucket app password | ✅ | - |
-| `LOG_LEVEL` | Logging level | ❌ | INFO |
-| `MAX_FILE_SIZE` | Max upload size in bytes | ❌ | 10485760 |
-| `LLM_TEMPERATURE` | AI creativity (0-1) | ❌ | 0.1 |
-| `PR_BRANCH_PREFIX` | Branch name prefix | ❌ | vulnfixer |
+# 📦 BITBUCKET (Required for repository operations)  
+BITBUCKET_USERNAME=your_username
+BITBUCKET_TOKEN=your_app_password
 
-### Microsoft Copilot Setup
+# ⚙️ APPLICATION SETTINGS
+LOG_LEVEL=INFO
+ENVIRONMENT=development
+```
 
-1. Get access to [Microsoft Copilot API](https://docs.github.com/en/copilot)
-2. Generate API key from GitHub settings
-3. Add key to your `.env` file
+### Ollama Setup Verification
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
 
-### Bitbucket Setup
+# Test model availability
+ollama list
 
-1. Create [App Password](https://support.atlassian.com/bitbucket-cloud/docs/app-passwords/) in Bitbucket
-2. Grant permissions: `Repositories: Write`, `Pull requests: Write`
-3. Add username and app password to `.env` file
+# Pull additional models
+ollama pull deepseek-coder:6.7b
+```
+
+## 🧪 Testing Your Setup
+
+### 1. Test Ollama Connection
+```python
+from agents.tools.ollama_client import OllamaClient
+
+client = OllamaClient()
+status = await client.check_model_availability()
+print(f"Ollama Status: {status}")
+```
+
+### 2. Test Vulnerability Fix Generation
+```bash
+# Upload a sample BlackDuck report via web interface
+# Watch the logs to see Ollama processing in real-time
+tail -f logs/vulnfixer.log
+```
 
 ## 🚦 API Reference
 
-### Endpoints
+### Main Endpoints
 
 #### `POST /api/fix-vulnerabilities`
-Fix vulnerabilities in a repository
+Process vulnerabilities with local Ollama AI
 
-**Parameters:**
-- `report_file` (file): Vulnerability report
-- `repo_url` (string): Bitbucket repository URL
-- `repo_token` (string, optional): Repository access token
-- `create_pr` (boolean): Create pull request
-- `branch_name` (string, optional): Custom branch name
-
-#### `POST /api/analyze-report`
-Analyze vulnerability report without fixing
+#### `GET /api/agent-status`  
+Check Ollama availability and model status
 
 #### `GET /api/supported-formats`
-Get list of supported report formats
+List supported vulnerability report formats
 
-#### `GET /api/agent-status`
-Get AI agent status and capabilities
+## 🎯 Performance Optimization
 
-## 🧪 Testing
+### Memory Management
+```python
+# Optimize for your system RAM
+OLLAMA_MODELS = {
+    "4GB":  "deepseek-coder:6.7b",    # Most efficient
+    "8GB":  "codellama:13b",          # Better quality
+    "16GB": "phind-codellama:34b"     # Best quality
+}
+```
 
+### GPU Acceleration (Optional)
 ```bash
-# Install test dependencies
-pip install pytest pytest-asyncio
-
-# Run tests
-pytest tests/
-
-# Run with coverage
-pytest --cov=app tests/
+# If you have NVIDIA GPU
+export CUDA_VISIBLE_DEVICES=0
+ollama pull codellama:7b
 ```
 
 ## 🐳 Docker Deployment
 
 ```bash
-# Build image
-docker build -t vulnfixer .
+# Build with Ollama support
+docker build -t vulnfixer-ollama .
 
-# Run container
-docker run -p 8000:8000 --env-file .env vulnfixer
-```
-
-### Docker Compose
-
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
+# Run with local Ollama
+docker run -p 8000:8000 -p 11434:11434 \
+  --env-file .env \
+  -v ollama_data:/root/.ollama \
+  vulnfixer-ollama
 ```
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](docs/CONTRIBUTING.md).
+We welcome contributions! The Ollama integration makes VulnFixer accessible to everyone.
 
 ### Development Setup
-
 ```bash
-# Clone and setup
 git clone https://github.com/yourusername/vulnfixer.git
 cd vulnfixer
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-
-# Install development dependencies
+source venv/bin/activate
 pip install -r requirements.txt
-pip install black flake8 pytest
 
-# Run in development mode
+# Start Ollama
+ollama serve &
+ollama pull codellama:7b
+
+# Run development server
 python -m uvicorn app.main:app --reload
-```
-
-### Code Style
-
-We use [Black](https://black.readthedocs.io/) for code formatting:
-
-```bash
-black app/ agents/ tests/
-flake8 app/ agents/ tests/
 ```
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - Use freely for personal and commercial projects!
 
-## 🙏 Acknowledgments
+## 🏆 Why VulnFixer with Ollama Wins
 
-- **Microsoft Copilot** for intelligent code generation
-- **Bitbucket** for seamless Git integration
-- **FastAPI** for the robust web framework
-- **OWASP** for vulnerability standards
-- **BlackDuck** for security scanning
+### **For Individuals**
+- ✅ **Zero cost** - No API subscriptions ever
+- ✅ **Complete privacy** - Code stays on your machine
+- ✅ **No limits** - Process unlimited vulnerabilities
 
-## 📞 Support
+### **For Teams**  
+- ✅ **Enterprise ready** - Air-gap compatible
+- ✅ **Consistent results** - Same AI model for everyone
+- ✅ **No vendor lock-in** - Own your AI infrastructure
 
-- 📧 **Issues**: [GitHub Issues](https://github.com/yourusername/vulnfixer/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/vulnfixer/discussions)
-- 📖 **Documentation**: [Wiki](https://github.com/yourusername/vulnfixer/wiki)
+### **For Organizations**
+- ✅ **Cost effective** - No per-usage fees
+- ✅ **Compliance friendly** - Data never leaves premises  
+- ✅ **Scalable** - Deploy on your own infrastructure
+
+## 🎉 Get Started Now!
+
+```bash
+# Complete setup in 5 commands:
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama serve &
+ollama pull codellama:7b
+git clone https://github.com/yourusername/vulnfixer.git
+cd vulnfixer && pip install -r requirements.txt && python -m uvicorn app.main:app --reload
+```
+
+**Open http://localhost:8000 and start fixing vulnerabilities with free, local AI!** 🚀
 
 ---
 
-**⚡ Built for speed, security, and simplicity. Get your vulnerabilities fixed in minutes, not hours!**
+**🦙 Powered by Ollama - Because your code deserves privacy and your wallet deserves a break!**
