@@ -1,0 +1,14 @@
+# 1. Test basic setup
+pip install -r requirements.txt
+
+# 2. Test Ollama connection
+curl http://localhost:11434/api/tags
+
+# 3. Test application
+python -m uvicorn app.main:app --reload
+
+# 4. Test Docker
+docker-compose up --build -d
+
+# 5. Test Kubernetes  
+./scripts/deploy-k8s.sh deploy

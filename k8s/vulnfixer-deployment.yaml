@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vulnfixer-deployment
+  namespace: vulnfixer
+  labels:
+    app: vulnfixer
+    component: application
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: vulnfixer
+  template:
+    metadata:
+      labels:
+        app: vulnfixer
+        component: application
+    spec:
+      containers:
+      - name: vulnfixer
+        image: rakeshrocky58008/vulnfixer:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: USE_OLLAMA
+          value: "true"
+        - name: OLLAMA_BASE_URL
+          value: "http://ollama-internal:11434"
+        - name: OLLAMA_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: vulnfixer-config
+              key: OLLAMA_MODEL
+        - name: OLLAMA_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: vulnfixer-config
+              key: OLLAMA_TIMEOUT
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: vulnfixer-config
+              key: LOG_LEVEL
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: vulnfixer-config
+              key: ENVIRONMENT
+        # Add Bitbucket credentials from secrets (create secrets.yaml)
+        - name: BITBUCKET_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: vulnfixer-secrets
+              key: BITBUCKET_USERNAME
+              optional: true
+        - name: BITBUCKET_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: vulnfixer-secrets
+              key: BITBUCKET_TOKEN
+              optional: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "0.5"
+          limits:
+            memory: "2Gi"
+            cpu: "2"
+        volumeMounts:
+        - name: temp-storage
+          mountPath: /tmp/vulnfixer
+        - name: logs
+          mountPath: /app/logs
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: temp-storage
+        emptyDir:
+          sizeLimit: 5Gi
+      - name: logs
+        emptyDir: {}
+      # Wait for Ollama to be ready
+      initContainers:
+      - name: wait-for-ollama
+        image: curlimages/curl:latest
+        command: ['sh', '-c']
+        args:
+        - |
+          echo "🔄 Waiting for Ollama service..."
+          until curl -f http://ollama-internal:11434/api/tags; do
+            echo "⏳ Ollama not ready, sleeping for 10 seconds..."
+            sleep 10
+          done
+          echo "✅ Ollama is ready!"
+---
+# ClusterIP Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: vulnfixer-service
+  namespace: vulnfixer
+  labels:
+    app: vulnfixer
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: vulnfixer
+---
+# LoadBalancer Service for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: vulnfixer-external
+  namespace: vulnfixer
+  labels:
+    app: vulnfixer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: vulnfixer

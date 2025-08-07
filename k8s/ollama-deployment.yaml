@@ -1,0 +1,167 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama-deployment
+  namespace: vulnfixer
+  labels:
+    app: ollama
+    component: ai-engine
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+        component: ai-engine
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+          name: ollama-api
+        env:
+        - name: OLLAMA_HOST
+          value: "0.0.0.0"
+        - name: OLLAMA_PORT
+          value: "11434"
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+        volumeMounts:
+        - name: ollama-data
+          mountPath: /root/.ollama
+        - name: init-script
+          mountPath: /usr/local/bin/init-models.sh
+          subPath: init-models.sh
+        livenessProbe:
+          httpGet:
+            path: /api/tags
+            port: 11434
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/tags
+            port: 11434
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - "/bin/bash"
+              - "/usr/local/bin/init-models.sh"
+      volumes:
+      - name: ollama-data
+        persistentVolumeClaim:
+          claimName: ollama-pvc
+      - name: init-script
+        configMap:
+          name: ollama-init-script
+          defaultMode: 0755
+---
+# NodePort Service for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-service
+  namespace: vulnfixer
+  labels:
+    app: ollama
+    component: ai-engine
+spec:
+  type: NodePort
+  ports:
+  - port: 11434
+    targetPort: 11434
+    nodePort: 30434  # Accessible externally on port 30434
+    protocol: TCP
+    name: ollama-api
+  selector:
+    app: ollama
+---
+# ClusterIP Service for internal access
+apiVersion: v1
+kind: Service  
+metadata:
+  name: ollama-internal
+  namespace: vulnfixer
+  labels:
+    app: ollama
+spec:
+  type: ClusterIP
+  ports:
+  - port: 11434
+    targetPort: 11434
+    protocol: TCP
+    name: ollama-api-internal
+  selector:
+    app: ollama
+---
+# Persistent Volume Claim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-pvc
+  namespace: vulnfixer
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+  # storageClassName: fast-ssd  # Uncomment if you have SSD storage class
+---
+# ConfigMap for model initialization
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ollama-init-script
+  namespace: vulnfixer
+data:
+  init-models.sh: |
+    #!/bin/bash
+    echo "🦙 Initializing Ollama models..."
+    
+    # Wait for Ollama server to start
+    for i in {1..30}; do
+        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            echo "✅ Ollama server is ready"
+            break
+        fi
+        echo "⏳ Waiting for Ollama server... ($i/30)"
+        sleep 5
+    done
+    
+    # Pull required models
+    MODELS="codellama:7b deepseek-coder:6.7b"
+    
+    for model in $MODELS; do
+        echo "📥 Checking model: $model"
+        if ! ollama list | grep -q "$model"; then
+            echo "🔄 Pulling model: $model"
+            ollama pull "$model" &
+        else
+            echo "✅ Model $model already available"
+        fi
+    done
+    
+    # Wait for all background pulls to complete
+    wait
+    
+    echo "🎉 All models ready!"
+    ollama list
