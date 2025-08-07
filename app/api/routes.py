@@ -139,12 +139,20 @@ async def get_supported_formats():
                 "extensions": [".json", ".xml"]
             },
             {
+                "name": "Snyk",
+                "description": "Snyk vulnerability reports",
+                "mime_types": ["application/json"],
+                "extensions": [".json"]
+            },
+            {
                 "name": "Generic JSON",
                 "description": "Generic vulnerability report in JSON format",
                 "mime_types": ["application/json"],
                 "extensions": [".json"]
             }
-        ]
+        ],
+        "ai_engine": "Local Ollama - No API keys required",
+        "privacy": "100% local processing"
     }
 
 @router.get("/agent-status")
@@ -152,19 +160,28 @@ async def get_agent_status():
     """
     Get current agent status and capabilities
     """
+    # Check Ollama availability
+    ollama_status = await agent.ollama_client.check_model_availability()
+    
     return {
-        "status": "active",
+        "status": "active" if ollama_status.get("ollama_running") else "ollama_not_running",
+        "ai_engine": "Local Ollama",
         "model": agent.get_model_info(),
+        "ollama_status": ollama_status,
         "capabilities": [
             "Vulnerability report parsing",
-            "Automated code fixing",
-            "GitHub integration",
-            "Pull request creation"
+            "Local AI-powered code fixing",
+            "Bitbucket integration",
+            "Pull request creation",
+            "Offline processing"
         ],
         "supported_languages": [
             "Java (Maven)",
-            "Python",
+            "Python", 
             "JavaScript/Node.js",
-            "C#/.NET"
-        ]
+            "C#/.NET",
+            "Go",
+            "PHP"
+        ],
+        "privacy": "100% local processing - code never leaves your machine"
     }
