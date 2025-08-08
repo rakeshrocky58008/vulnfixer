@@ -1,5 +1,6 @@
 """
 Ollama Local AI Client for Vulnerability Fixing
+No API keys needed - runs completely local!
 """
 
 import aiohttp
@@ -15,9 +16,9 @@ class OllamaClient:
     """Client for local Ollama API"""
     
     def __init__(self):
-        self.base_url = settings.OLLAMA_BASE_URL
-        self.model = settings.OLLAMA_MODEL
-        self.timeout = settings.OLLAMA_TIMEOUT
+        self.base_url = settings.OLLAMA_BASE_URL  # Default: http://localhost:11434
+        self.model = settings.OLLAMA_MODEL        # Default: codellama:7b
+        self.timeout = settings.OLLAMA_TIMEOUT    # Default: 120 seconds
     
     async def generate_vulnerability_fix(
         self,
@@ -25,14 +26,16 @@ class OllamaClient:
         code_context: str,
         file_type: str = "java"
     ) -> Dict:
-        """Generate a vulnerability fix using local Ollama"""
+        """
+        Generate a vulnerability fix using local Ollama
+        """
         try:
             prompt = self._create_fix_prompt(vulnerability, code_context, file_type)
             
             response_text = await self._chat_with_ollama([
                 {
                     "role": "system",
-                    "content": "You are a senior security engineer. Fix vulnerabilities with minimal, secure changes."
+                    "content": "You are a senior security engineer expert in fixing code vulnerabilities. Provide secure, minimal fixes that maintain functionality. Focus on practical, production-ready solutions."
                 },
                 {
                     "role": "user", 
@@ -43,13 +46,17 @@ class OllamaClient:
             return {
                 "success": True,
                 "fix_content": response_text,
-                "reasoning": f"Fixed {vulnerability.get('name')} using Ollama",
+                "reasoning": f"Fixed {vulnerability.get('name')} vulnerability using local Ollama ({self.model})",
+                "confidence": 0.8,
                 "model_used": self.model
             }
             
         except Exception as e:
             logger.error(f"Error generating fix with Ollama: {str(e)}")
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False,
+                "error": str(e)
+            }
     
     async def generate_dependency_update(
         self,
@@ -57,14 +64,16 @@ class OllamaClient:
         current_file_content: str,
         build_file_type: str = "maven"
     ) -> Dict:
-        """Generate dependency update fix using local Ollama"""
+        """
+        Generate dependency update fix using local Ollama
+        """
         try:
             prompt = self._create_dependency_prompt(vulnerability, current_file_content, build_file_type)
             
             response_text = await self._chat_with_ollama([
                 {
                     "role": "system",
-                    "content": "You are an expert in dependency management. Update vulnerable dependencies safely."
+                    "content": "You are an expert in dependency management and security vulnerabilities. Update vulnerable dependencies while maintaining compatibility and following best practices."
                 },
                 {
                     "role": "user",
@@ -76,58 +85,19 @@ class OllamaClient:
                 "success": True,
                 "updated_content": response_text,
                 "reasoning": f"Updated {vulnerability.get('component')} to fix vulnerability",
+                "old_version": vulnerability.get("current_version"),
+                "new_version": vulnerability.get("fixed_version"),
                 "model_used": self.model
             }
             
         except Exception as e:
             logger.error(f"Error generating dependency update: {str(e)}")
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False,
+                "error": str(e)
+            }
     
     async def _chat_with_ollama(self, messages: List[Dict]) -> str:
-        """Send chat request to local Ollama instance"""
-        prompt = self._messages_to_prompt(messages)
-        
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": settings.LLM_TEMPERATURE,
-                "num_ctx": 4096,
-                "num_predict": settings.MAX_TOKENS
-            }
-        }
-        
-        timeout = aiohttp.ClientTimeout(total=self.timeout)
-        
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                f"{self.base_url}/api/generate",
-                json=payload
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("response", "")
-                else:
-                    error_text = await response.text()
-                    raise Exception(f"Ollama error: {error_text}")
-    
-    def _messages_to_prompt(self, messages: List[Dict]) -> str:
-        """Convert chat messages to prompt for Ollama"""
-        prompt_parts = []
-        for message in messages:
-            role = message.get("role", "user")
-            content = message.get("content", "")
-            
-            if role == "system":
-                prompt_parts.append(f"System: {content}")
-            elif role == "user":
-                prompt_parts.append(f"User: {content}")
-        
-        prompt_parts.append("Assistant:")
-        return "\n\n".join(prompt_parts)
-
-   async def _chat_with_ollama(self, messages: List[Dict]) -> str:
         """
         Send chat request to local Ollama instance
         """
