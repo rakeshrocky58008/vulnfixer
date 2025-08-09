@@ -12,3 +12,11 @@ docker-compose up --build -d
 
 # 5. Test Kubernetes  
 ./scripts/deploy-k8s.sh deploy
+
+
+##
+# Your existing endpoint should now return enhanced data
+curl -X POST "http://localhost:8000/api/fix-vulnerabilities" \
+  -F "report_file=@your_blackduck_report.csv" \
+  -F "repo_url=https://bitbucket.org/workspace/repository" \
+  -F "repo_token=your_app_password"
