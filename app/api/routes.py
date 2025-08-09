@@ -1,5 +1,5 @@
 """
-Updated API Routes for VulnFixer with Universal Parser Support
+API Routes for VulnFixer with Universal Parser Support
 """
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
@@ -12,7 +12,7 @@ import time
 
 from app.models import FixResponse, FixRequest
 from agents.vulnerability_agent import VulnerabilityAgent
-from agents.tools.parsers import VulnerabilityParser  # Now universal!
+from agents.tools.parsers import VulnerabilityParser
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -126,7 +126,7 @@ async def analyze_report(
 @router.get("/supported-formats")
 async def get_supported_formats():
     """
-    Get list of supported vulnerability report formats (UPDATED)
+    Get list of supported vulnerability report formats
     """
     parser = VulnerabilityParser()
     supported_scanners = parser.get_supported_scanners()
@@ -227,7 +227,7 @@ async def get_supported_formats():
 @router.get("/agent-status")
 async def get_agent_status():
     """
-    Get current agent status and capabilities (UPDATED)
+    Get current agent status and capabilities
     """
     # Check Ollama availability
     ollama_status = await agent.ollama_client.check_model_availability()
