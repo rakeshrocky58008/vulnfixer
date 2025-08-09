@@ -3,7 +3,7 @@ Configuration management for VulnFixer with Universal Parser Support
 """
 
 from pydantic_settings import BaseSettings
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict
 import os
 
 class Settings(BaseSettings):
@@ -28,7 +28,10 @@ class Settings(BaseSettings):
     # ============================================================================
     # SUPPORTED SCANNERS (NEW!)
     # ============================================================================
-    SUPPORTED_SCANNERS: Union[str, List[str]] = "blackduck,trivy,xray,jfrog,clair,snyk,anchore,generic"
+    SUPPORTED_SCANNERS: List[str] = [
+        "blackduck", "trivy", "xray", "jfrog", 
+        "clair", "snyk", "anchore", "generic"
+    ]
     SCANNER_DETECTION_CONFIDENCE_THRESHOLD: float = 0.5
     
     # ============================================================================
@@ -75,17 +78,27 @@ class Settings(BaseSettings):
     # ============================================================================
     DEFAULT_BRANCH: str = "main"
     PR_BRANCH_PREFIX: str = "vulnfixer"
-    SUPPORTED_REPOS: Union[str, List[str]] = "bitbucket,github"
+    SUPPORTED_REPOS: List[str] = ["bitbucket", "github"]
     
     # ============================================================================
-    # ENHANCED FORMAT SUPPORT
+    # ENHANCED FORMAT SUPPORT (UPDATED)
     # ============================================================================
-    SUPPORTED_FORMATS: Union[str, List[str]] = "application/json,text/plain,application/xml,text/csv,text/html,application/csv"
-    SUPPORTED_FILE_EXTENSIONS: Union[str, List[str]] = ".csv,.json,.xml,.html,.htm"
-    SUPPORTED_MIME_TYPES: Union[str, List[str]] = "text/csv,application/json,application/xml,text/html"
+    SUPPORTED_FORMATS: List[str] = [
+        "application/json",
+        "text/plain", 
+        "application/xml",
+        "text/csv",
+        "text/html",
+        "application/csv"
+    ]
+    
+    SUPPORTED_FILE_EXTENSIONS: List[str] = [".csv", ".json", ".xml", ".html", ".htm"]
+    SUPPORTED_MIME_TYPES: List[str] = [
+        "text/csv", "application/json", "application/xml", "text/html"
+    ]
     
     # ============================================================================
-    # ENHANCED PARSING SETTINGS
+    # ENHANCED PARSING SETTINGS (NEW!)
     # ============================================================================
     HTML_PARSER_ENABLED: bool = True
     XML_NAMESPACE_IGNORE: bool = True
@@ -95,7 +108,7 @@ class Settings(BaseSettings):
     ALLOW_PARTIAL_MATCHES: bool = True
     
     # ============================================================================
-    # PERFORMANCE SETTINGS
+    # PERFORMANCE SETTINGS (NEW!)
     # ============================================================================
     PARSER_CACHE_SIZE: int = 1000
     PARALLEL_PROCESSING: bool = True
@@ -104,34 +117,29 @@ class Settings(BaseSettings):
     ENHANCEMENT_BATCH_SIZE: int = 10
     
     # ============================================================================
-    # SECURITY SETTINGS
+    # SCANNER-SPECIFIC SETTINGS (NEW!)
     # ============================================================================
-    VALIDATE_FILE_CONTENT: bool = True
-    MAX_VULNERABILITIES_PER_FILE: int = 10000
-    SANITIZE_INPUT_DATA: bool = True
+    BLACKDUCK_SEVERITY_MAPPING: Dict[str, str] = {
+        "CRITICAL": "CRITICAL", "HIGH": "HIGH", 
+        "MEDIUM": "MEDIUM", "LOW": "LOW"
+    }
+    
+    TRIVY_SEVERITY_MAPPING: Dict[str, str] = {
+        "CRITICAL": "CRITICAL", "HIGH": "HIGH", 
+        "MEDIUM": "MEDIUM", "LOW": "LOW", "UNKNOWN": "UNKNOWN"
+    }
     
     # ============================================================================
-    # LOGGING CONFIGURATION
+    # OLLAMA MODEL OPTIONS
     # ============================================================================
-    ENABLE_PARSER_DEBUG_LOGS: bool = False
-    ENABLE_ENHANCEMENT_DEBUG_LOGS: bool = False
-    LOG_SCANNER_DETECTION_DETAILS: bool = True
-    
-    # ============================================================================
-    # ADVANCED CONFIGURATION
-    # ============================================================================
-    SKIP_ENHANCEMENT_ON_ERROR: bool = False
-    
-    # Development settings
-    DEV_MODE: bool = False
-    MOCK_EXTERNAL_APIS: bool = False
-    ENABLE_TEST_ENDPOINTS: bool = False
-    BYPASS_BITBUCKET_AUTH: bool = False
-    
-    # Monitoring settings
-    ENABLE_METRICS: bool = False
-    METRICS_PORT: int = 8001
-    HEALTH_CHECK_INTERVAL: int = 30
+    OLLAMA_MODELS: Dict[str, str] = {
+        "codellama:7b": "Best for code generation (4GB RAM)",
+        "codellama:13b": "Better quality, needs 8GB RAM", 
+        "deepseek-coder:6.7b": "Fast and efficient for coding",
+        "phind-codellama:34b": "Highest quality, needs 16GB+ RAM",
+        "llama2:7b": "General purpose model",
+        "mistral:7b": "Fast general purpose model"
+    }
     
     # ============================================================================
     # ENHANCEMENT API ENDPOINTS
@@ -149,67 +157,39 @@ class Settings(BaseSettings):
     OSV_API_RATE_LIMIT: int = 1000
     PACKAGE_API_RATE_LIMIT: int = 100
     
+    # ============================================================================
+    # SECURITY SETTINGS (NEW!)
+    # ============================================================================
+    VALIDATE_FILE_CONTENT: bool = True
+    MAX_VULNERABILITIES_PER_FILE: int = 10000
+    SANITIZE_INPUT_DATA: bool = True
+    
+    # ============================================================================
+    # LOGGING CONFIGURATION (NEW!)
+    # ============================================================================
+    ENABLE_PARSER_DEBUG_LOGS: bool = False
+    ENABLE_ENHANCEMENT_DEBUG_LOGS: bool = False
+    LOG_SCANNER_DETECTION_DETAILS: bool = True
+    
+    # ============================================================================
+    # ADVANCED CONFIGURATION (NEW!)
+    # ============================================================================
+    SKIP_ENHANCEMENT_ON_ERROR: bool = False
+    
+    # Development settings
+    DEV_MODE: bool = False
+    MOCK_EXTERNAL_APIS: bool = False
+    ENABLE_TEST_ENDPOINTS: bool = False
+    BYPASS_BITBUCKET_AUTH: bool = False
+    
+    # Monitoring settings
+    ENABLE_METRICS: bool = False
+    METRICS_PORT: int = 8001
+    HEALTH_CHECK_INTERVAL: int = 30
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Convert comma-separated strings to lists after initialization
-        self._convert_string_lists()
-
-    def _convert_string_lists(self):
-        """Convert comma-separated strings to lists"""
-        string_list_fields = [
-            'SUPPORTED_SCANNERS',
-            'SUPPORTED_REPOS', 
-            'SUPPORTED_FORMATS',
-            'SUPPORTED_FILE_EXTENSIONS',
-            'SUPPORTED_MIME_TYPES'
-        ]
-        
-        for field in string_list_fields:
-            value = getattr(self, field)
-            if isinstance(value, str):
-                # Convert comma-separated string to list
-                converted_list = [item.strip() for item in value.split(',') if item.strip()]
-                setattr(self, field, converted_list)
-
-    # ============================================================================
-    # STATIC SEVERITY MAPPINGS
-    # ============================================================================
-    @property
-    def BLACKDUCK_SEVERITY_MAPPING(self) -> Dict[str, str]:
-        """BlackDuck severity mapping"""
-        return {
-            "CRITICAL": "CRITICAL",
-            "HIGH": "HIGH",
-            "MEDIUM": "MEDIUM",
-            "LOW": "LOW"
-        }
-    
-    @property
-    def TRIVY_SEVERITY_MAPPING(self) -> Dict[str, str]:
-        """Trivy severity mapping"""
-        return {
-            "CRITICAL": "CRITICAL",
-            "HIGH": "HIGH",
-            "MEDIUM": "MEDIUM",
-            "LOW": "LOW",
-            "UNKNOWN": "UNKNOWN"
-        }
-
-    @property
-    def OLLAMA_MODELS(self) -> Dict[str, str]:
-        """Available Ollama models"""
-        return {
-            "codellama:7b": "Best for code generation (4GB RAM)",
-            "codellama:13b": "Better quality, needs 8GB RAM", 
-            "deepseek-coder:6.7b": "Fast and efficient for coding",
-            "phind-codellama:34b": "Highest quality, needs 16GB+ RAM",
-            "llama2:7b": "General purpose model",
-            "mistral:7b": "Fast general purpose model"
-        }
 
 # Global settings instance
 settings = Settings()
@@ -257,6 +237,15 @@ def validate_settings():
         missing_required = [s for s in required_scanners if s not in settings.SUPPORTED_SCANNERS]
         if missing_required:
             errors.append(f"Missing required scanners: {missing_required}")
+        
+        # Check internet connectivity for external APIs
+        if settings.ENABLE_FIXED_VERSION_RESOLUTION:
+            if settings.ENABLE_GITHUB_ADVISORY or settings.ENABLE_OSV_API:
+                try:
+                    import socket
+                    socket.create_connection(("8.8.8.8", 53), timeout=3)
+                except OSError:
+                    warnings.append("No internet connection detected - external API enhancement will be limited")
     
     # Validate file size limits
     if settings.MAX_FILE_SIZE > 50 * 1024 * 1024:  # 50MB
@@ -275,13 +264,16 @@ def validate_settings():
         for warning in warnings:
             logger.warning(warning)
 
+# ============================================================================
+# AUTO-CONFIGURATION FUNCTIONS
+# ============================================================================
+
 def auto_configure():
     """Auto-configure based on available resources and scanner support"""
-    try:
-        import psutil
-        available_ram_gb = psutil.virtual_memory().available / (1024**3)
-    except ImportError:
-        available_ram_gb = 4  # Default assumption
+    import psutil
+    
+    # Check available RAM and suggest best Ollama model
+    available_ram_gb = psutil.virtual_memory().available / (1024**3)
     
     if available_ram_gb >= 16:
         recommended_model = "phind-codellama:34b"
@@ -290,7 +282,7 @@ def auto_configure():
     elif available_ram_gb >= 4:
         recommended_model = "codellama:7b"
     else:
-        recommended_model = "deepseek-coder:6.7b"
+        recommended_model = "deepseek-coder:6.7b"  # Smallest efficient model
     
     # Check network connectivity for enhancement features
     network_available = False
@@ -308,11 +300,29 @@ def auto_configure():
         len(settings.SUPPORTED_SCANNERS) > 0
     )
     
+    # Check Ollama status
+    ollama_available = False
+    try:
+        import aiohttp
+        import asyncio
+        async def check_ollama():
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=aiohttp.ClientTimeout(total=5)) as response:
+                        return response.status == 200
+            except:
+                return False
+        
+        ollama_available = asyncio.run(check_ollama()) if hasattr(asyncio, 'run') else False
+    except:
+        pass
+    
     config_recommendations = {
         "recommended_model": recommended_model,
         "available_ram_gb": available_ram_gb,
         "current_model": settings.OLLAMA_MODEL,
         "network_available": network_available,
+        "ollama_available": ollama_available,
         "enhancement_enabled": settings.ENABLE_FIXED_VERSION_RESOLUTION,
         "universal_parser_enabled": settings.ENABLE_UNIVERSAL_PARSING,
         "parser_config_valid": parser_config_valid,
@@ -331,16 +341,57 @@ def auto_configure():
             "Universal parser not properly configured - check SUPPORTED_SCANNERS setting"
         )
     
+    if not ollama_available and settings.USE_OLLAMA:
+        config_recommendations["recommendations"].append(
+            "Ollama not running - start with 'ollama serve' command"
+        )
+    
+    if settings.OLLAMA_MODEL == "codellama:7b" and available_ram_gb >= 8:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Consider upgrading to {recommended_model} for better performance (you have {available_ram_gb:.1f}GB RAM)")
+    
     return config_recommendations
+
+# ============================================================================
+# ENVIRONMENT-SPECIFIC SETUP
+# ============================================================================
 
 def setup_environment():
     """Setup environment-specific configurations"""
-    # Simple environment setup without trying to modify immutable settings
-    pass
+    if settings.ENVIRONMENT == "production":
+        # Production settings
+        settings.LOG_LEVEL = "WARNING"
+        settings.ENHANCEMENT_TIMEOUT = 60
+        settings.MAX_CONCURRENT_ENHANCEMENTS = 3  # Conservative for production
+        settings.ENABLE_PARSER_DEBUG_LOGS = False
+        settings.ENABLE_ENHANCEMENT_DEBUG_LOGS = False
+        settings.DEV_MODE = False
+        settings.ENABLE_TEST_ENDPOINTS = False
+        
+    elif settings.ENVIRONMENT == "development":
+        # Development settings
+        settings.LOG_LEVEL = "DEBUG"
+        settings.ENHANCEMENT_TIMEOUT = 30
+        settings.MAX_CONCURRENT_ENHANCEMENTS = 5
+        settings.ENABLE_PARSER_DEBUG_LOGS = True
+        settings.DEV_MODE = True
+        
+    elif settings.ENVIRONMENT == "testing":
+        # Testing settings
+        settings.ENABLE_FIXED_VERSION_RESOLUTION = False  # Disable external calls in tests
+        settings.AUTO_DETECT_SCANNER = True  # Keep auto-detection for testing
+        settings.LOG_LEVEL = "ERROR"
+        settings.MOCK_EXTERNAL_APIS = True
+        settings.ENABLE_TEST_ENDPOINTS = True
+
+# ============================================================================
+# SCANNER-SPECIFIC FUNCTIONS
+# ============================================================================
 
 def validate_scanner_support():
     """Validate scanner configurations"""
-    required_scanners = ["blackduck", "trivy", "generic"]
+    required_scanners = ["blackduck", "trivy", "generic"]  # Minimum required
     
     missing_scanners = [s for s in required_scanners if s not in settings.SUPPORTED_SCANNERS]
     if missing_scanners:
@@ -415,10 +466,45 @@ def get_all_scanner_configs() -> Dict[str, Dict]:
     """Get all scanner configurations"""
     return {scanner: get_scanner_config(scanner) for scanner in settings.SUPPORTED_SCANNERS}
 
+# ============================================================================
+# MIGRATION AND COMPATIBILITY FUNCTIONS
+# ============================================================================
+
 def migrate_legacy_config():
     """Migrate legacy configuration to universal parser format"""
-    # Simple migration check
-    pass
+    migrations = []
+    
+    # Check for legacy BlackDuck-specific settings
+    legacy_settings = [
+        "BLACKDUCK_ONLY_MODE",
+        "ENABLE_BLACKDUCK_PARSING", 
+        "BLACKDUCK_CSV_SUPPORT",
+        "TRIVY_ONLY_MODE",
+        "SINGLE_SCANNER_MODE"
+    ]
+    
+    for legacy_setting in legacy_settings:
+        if os.getenv(legacy_setting):
+            migrations.append(f"Legacy setting {legacy_setting} detected - now handled by universal parser")
+    
+    # Check for old field mapping configurations
+    old_field_configs = [
+        "BLACKDUCK_COMPONENT_FIELD",
+        "BLACKDUCK_VERSION_FIELD", 
+        "TRIVY_PACKAGE_FIELD"
+    ]
+    
+    for old_config in old_field_configs:
+        if os.getenv(old_config):
+            migrations.append(f"Legacy field mapping {old_config} detected - now auto-mapped by universal parser")
+    
+    if migrations:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("Configuration migrations detected:")
+        for migration in migrations:
+            logger.info(f"  • {migration}")
+        logger.info("  • Universal parser now handles all scanner types automatically")
 
 def check_compatibility():
     """Check compatibility with existing codebase"""
@@ -432,12 +518,29 @@ def check_compatibility():
     except ImportError as e:
         compatibility_issues.append(f"Missing required module: {e}")
     
+    # Check if enhancement modules are available
+    try:
+        from app.services.vulnerability_enhancer import VulnerabilityEnhancer
+        from app.services.fixed_version_resolver import FixedVersionResolver
+    except ImportError:
+        compatibility_issues.append("Enhancement modules not available - fixed version resolution will be limited")
+    
+    # Check if Ollama client is available
+    try:
+        from agents.tools.ollama_client import OllamaClient
+    except ImportError:
+        compatibility_issues.append("Ollama client not available - AI features will be limited")
+    
     if compatibility_issues:
         import logging
         logger = logging.getLogger(__name__)
         logger.warning("Compatibility issues detected:")
         for issue in compatibility_issues:
             logger.warning(f"  • {issue}")
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
 def get_effective_config() -> Dict:
     """Get the effective configuration after all overrides"""
@@ -462,6 +565,18 @@ def get_effective_config() -> Dict:
             "github_advisory": settings.ENABLE_GITHUB_ADVISORY,
             "osv_api": settings.ENABLE_OSV_API,
             "package_apis": settings.ENABLE_PACKAGE_APIS
+        },
+        "performance": {
+            "parallel_processing": settings.PARALLEL_PROCESSING,
+            "max_concurrent": settings.MAX_CONCURRENT_ENHANCEMENTS,
+            "parser_cache": settings.PARSER_CACHE_SIZE,
+            "retry_count": settings.ENHANCEMENT_RETRY_COUNT
+        },
+        "security": {
+            "validate_content": settings.VALIDATE_FILE_CONTENT,
+            "max_vulns_per_file": settings.MAX_VULNERABILITIES_PER_FILE,
+            "sanitize_input": settings.SANITIZE_INPUT_DATA,
+            "max_file_size": settings.MAX_FILE_SIZE
         }
     }
 
@@ -482,6 +597,127 @@ def get_scanner_statistics() -> Dict:
         "auto_detection_enabled": settings.AUTO_DETECT_SCANNER,
         "enhancement_enabled": settings.ENABLE_FIXED_VERSION_RESOLUTION
     }
+
+def validate_file_format(filename: str, content_type: str = None) -> bool:
+    """Validate if file format is supported"""
+    file_ext = os.path.splitext(filename)[1].lower()
+    
+    # Check extension
+    if file_ext not in settings.SUPPORTED_FILE_EXTENSIONS:
+        return False
+    
+    # Check MIME type if provided
+    if content_type and content_type not in settings.SUPPORTED_MIME_TYPES:
+        return False
+    
+    return True
+
+def get_recommended_settings() -> Dict:
+    """Get recommended settings based on environment and resources"""
+    recommendations = {}
+    
+    # Environment-based recommendations
+    if settings.ENVIRONMENT == "production":
+        recommendations.update({
+            "LOG_LEVEL": "WARNING",
+            "MAX_CONCURRENT_ENHANCEMENTS": 3,
+            "ENHANCEMENT_TIMEOUT": 60,
+            "ENABLE_PARSER_DEBUG_LOGS": False
+        })
+    elif settings.ENVIRONMENT == "development":
+        recommendations.update({
+            "LOG_LEVEL": "DEBUG", 
+            "MAX_CONCURRENT_ENHANCEMENTS": 5,
+            "ENHANCEMENT_TIMEOUT": 30,
+            "ENABLE_PARSER_DEBUG_LOGS": True
+        })
+    
+    # Resource-based recommendations
+    try:
+        import psutil
+        available_ram_gb = psutil.virtual_memory().available / (1024**3)
+        
+        if available_ram_gb >= 16:
+            recommendations["OLLAMA_MODEL"] = "phind-codellama:34b"
+            recommendations["MAX_CONCURRENT_ENHANCEMENTS"] = 8
+        elif available_ram_gb >= 8:
+            recommendations["OLLAMA_MODEL"] = "codellama:13b"
+            recommendations["MAX_CONCURRENT_ENHANCEMENTS"] = 5
+        elif available_ram_gb < 4:
+            recommendations["OLLAMA_MODEL"] = "deepseek-coder:6.7b"
+            recommendations["MAX_CONCURRENT_ENHANCEMENTS"] = 2
+    except ImportError:
+        pass
+    
+    return recommendations
+
+# ============================================================================
+# HEALTH CHECK FUNCTIONS
+# ============================================================================
+
+def health_check() -> Dict:
+    """Perform comprehensive health check"""
+    health_status = {
+        "overall": "healthy",
+        "components": {},
+        "warnings": [],
+        "errors": []
+    }
+    
+    # Check configuration validity
+    try:
+        validate_settings()
+        health_status["components"]["configuration"] = "healthy"
+    except Exception as e:
+        health_status["components"]["configuration"] = "error"
+        health_status["errors"].append(f"Configuration validation failed: {e}")
+        health_status["overall"] = "unhealthy"
+    
+    # Check universal parser
+    try:
+        if settings.ENABLE_UNIVERSAL_PARSING:
+            if len(settings.SUPPORTED_SCANNERS) > 0:
+                health_status["components"]["universal_parser"] = "healthy"
+            else:
+                health_status["components"]["universal_parser"] = "warning"
+                health_status["warnings"].append("No scanners configured")
+        else:
+            health_status["components"]["universal_parser"] = "disabled"
+    except Exception as e:
+        health_status["components"]["universal_parser"] = "error"
+        health_status["errors"].append(f"Universal parser check failed: {e}")
+    
+    # Check Ollama availability
+    if settings.USE_OLLAMA:
+        try:
+            # This would need to be async in practice
+            health_status["components"]["ollama"] = "unknown"  # Placeholder
+        except Exception as e:
+            health_status["components"]["ollama"] = "error"
+            health_status["errors"].append(f"Ollama check failed: {e}")
+    else:
+        health_status["components"]["ollama"] = "disabled"
+    
+    # Check enhancement services
+    if settings.ENABLE_FIXED_VERSION_RESOLUTION:
+        try:
+            # Check network connectivity for external APIs
+            import socket
+            socket.create_connection(("8.8.8.8", 53), timeout=3)
+            health_status["components"]["enhancement"] = "healthy"
+        except OSError:
+            health_status["components"]["enhancement"] = "warning"
+            health_status["warnings"].append("No internet connection - enhancement limited to local patterns")
+    else:
+        health_status["components"]["enhancement"] = "disabled"
+    
+    # Overall status determination
+    if health_status["errors"]:
+        health_status["overall"] = "unhealthy"
+    elif health_status["warnings"]:
+        health_status["overall"] = "degraded"
+    
+    return health_status
 
 # ============================================================================
 # INITIALIZATION
@@ -511,8 +747,7 @@ if os.getenv("SKIP_VALIDATION") != "true":
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Configuration initialization failed: {e}")
-        # Don't raise in case of validation issues during import
-        pass
+        raise
 
 # Export commonly used functions
 __all__ = [
@@ -524,6 +759,9 @@ __all__ = [
     'get_all_scanner_configs',
     'get_effective_config',
     'get_scanner_statistics',
+    'validate_file_format',
+    'get_recommended_settings',
+    'health_check',
     'migrate_legacy_config',
     'check_compatibility'
 ]
