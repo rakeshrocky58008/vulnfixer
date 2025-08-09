@@ -18,65 +18,77 @@ router = APIRouter()
 # Initialize the AI agent
 agent = VulnerabilityAgent()
 
-@router.post("/fix-vulnerabilities", response_model=FixResponse)
+
+@app.post("/api/fix-vulnerabilities")
 async def fix_vulnerabilities(
-    background_tasks: BackgroundTasks,
-    report_file: UploadFile = File(..., description="Vulnerability report file"),
-    repo_url: str = Form(..., description="Repository URL (GitHub or Bitbucket)"),
-    repo_token: Optional[str] = Form(None, description="Repository token (optional if set in env)"),
-    create_pr: bool = Form(True, description="Whether to create a pull request"),
-    branch_name: Optional[str] = Form(None, description="Custom branch name")
+    report_file: UploadFile = File(...),
+    repo_url: str = Form(...),
+    repo_token: str = Form(...),
+    create_pr: bool = Form(True)
 ):
-    """
-    Fix vulnerabilities in a repository based on the uploaded report
-    """
     try:
-        # Validate file type
-        if not report_file.content_type.startswith(('application/json', 'text/', 'application/xml')):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported file type: {report_file.content_type}"
-            )
+        # Your existing file saving logic
+        report_path = await save_uploaded_file(report_file)
         
-        # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_file:
-            content = await report_file.read()
-            tmp_file.write(content)
-            report_path = tmp_file.name
+        # NEW: Use enhanced parser
+        parser = VulnerabilityParser()
+        vulnerabilities = await parser.parse_with_enhancements(report_path)  # ENHANCED
         
-        logger.info(f"Processing vulnerability report for repo: {repo_url}")
+        # Log enhancement results
+        fixes_available = len([v for v in vulnerabilities if v.get('fixed_version')])
+        logger.info(f"Found {len(vulnerabilities)} vulnerabilities, {fixes_available} with fixes")
         
-        # Process with AI agent
-        result = await agent.process_vulnerability_fix(
-            report_path=report_path,
-            repo_url=repo_url,
-            repo_token=repo_token,
-            create_pr=create_pr,
-            branch_name=branch_name
-        )
+        # Your existing Ollama AI processing
+        fixes_applied = 0
+        for vuln in vulnerabilities:
+            if vuln.get('fixed_version'):
+                # Enhanced prompt with fix information
+                fix_prompt = f"""
+                Fix this vulnerability:
+                - Component: {vuln.get('component')}
+                - Current Version: {vuln.get('current_version')}
+                - Vulnerability: {vuln.get('name')}
+                - Recommended Fix: Upgrade to version {vuln.get('fixed_version')}
+                - Description: {vuln.get('description')}
+                
+                Generate the necessary code changes to upgrade this dependency.
+                """
+            else:
+                # Your existing prompt for vulnerabilities without known fixes
+                fix_prompt = f"""
+                Fix this vulnerability (no known version fix available):
+                - Component: {vuln.get('component')}
+                - Vulnerability: {vuln.get('name')}
+                - Description: {vuln.get('description')}
+                
+                Suggest alternative mitigation strategies.
+                """
+            
+            # Your existing Ollama AI call
+            fix_result = await ollama_client.generate_fix(fix_prompt)
+            if fix_result:
+                fixes_applied += 1
         
-        # Clean up temporary file
-        background_tasks.add_task(os.unlink, report_path)
+        # Your existing Bitbucket integration
+        pr_url = await create_bitbucket_pr(repo_url, repo_token, fixes_applied)
         
-        return FixResponse(
-            status="success",
-            message=result.get("message", "Vulnerabilities processed successfully"),
-            fixes_applied=result.get("fixes_applied", 0),
-            pr_url=result.get("pr_url"),
-            branch_name=result.get("branch_name"),
-            vulnerabilities_found=result.get("vulnerabilities_found", 0)
-        )
+        return {
+            "status": "success",
+            "message": f"Successfully processed {fixes_applied}/{len(vulnerabilities)} vulnerabilities",
+            "vulnerabilities_found": len(vulnerabilities),
+            "vulnerabilities_with_fixes": fixes_available,  # NEW metric
+            "fixes_applied": fixes_applied,
+            "pr_url": pr_url,
+            "processing_time": time.time() - start_time,
+            "model_used": "codellama:7b"
+        }
         
     except Exception as e:
-        logger.error(f"Error processing vulnerability fix: {str(e)}")
-        # Clean up on error
-        if 'report_path' in locals():
-            background_tasks.add_task(os.unlink, report_path)
-        
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing vulnerability fix: {str(e)}"
-        )
+        logger.error(f"Error processing vulnerabilities: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 
 @router.post("/analyze-report")
 async def analyze_report(
