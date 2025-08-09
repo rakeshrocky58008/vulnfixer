@@ -568,3 +568,20 @@ class VulnerabilityParser:
                 summary['critical_count'] += 1
         
         return summary
+
+
+    
+    async def parse_with_enhancements(self, report_path: str) -> List[Dict]:
+        """Enhanced version of your existing parse method"""
+        from app.services.vulnerability_enhancer import VulnerabilityEnhancer
+        
+        # Use your existing parsing logic
+        vulnerabilities = await self.parse_report(report_path)
+        
+        # Check if enhancement is enabled
+        import os
+        if os.getenv('ENABLE_FIXED_VERSION_RESOLUTION', 'true').lower() == 'true':
+            enhancer = VulnerabilityEnhancer()
+            vulnerabilities = await enhancer.enhance_vulnerabilities(vulnerabilities)
+        
+        return vulnerabilities
