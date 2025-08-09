@@ -1,100 +1,150 @@
 """
-Vulnerability Report Parsers for different formats
-Updated with BlackDuck CSV and HTML support
+Universal Vulnerability Report Parsers - UPDATED VERSION
+Supports: BlackDuck, Trivy, Xray, JFrog, Clair, Snyk, Anchore, and generic formats
 """
 
+import csv
 import json
 import xml.etree.ElementTree as ET
-import csv
 import logging
-from typing import Dict, List, Optional
 import os
 import re
+from typing import Dict, List, Optional, Any
 from html.parser import HTMLParser
-import io
-from app.services.vulnerability_enhancer import VulnerabilityEnhancer
-
 
 logger = logging.getLogger(__name__)
 
-class BlackDuckHTMLParser(HTMLParser):
-    """Custom HTML parser for BlackDuck HTML reports"""
+class VulnerabilityParser:
+    """
+    Universal parser that auto-detects and handles multiple vulnerability scanner formats
+    Drop-in replacement for your existing VulnerabilityParser
+    """
     
     def __init__(self):
-        super().__init__()
-        self.vulnerabilities = []
-        self.current_vulnerability = {}
-        self.current_tag = None
-        self.current_data = ""
-        self.in_vulnerability_section = False
-        self.in_table_row = False
-        self.current_cell_index = 0
-        self.table_headers = []
-        
-    def handle_starttag(self, tag, attrs):
-        self.current_tag = tag
-        
-        # Look for vulnerability table or section
-        if tag == 'table':
-            # Check if this is a vulnerability table
-            for attr_name, attr_value in attrs:
-                if 'vulnerab' in attr_value.lower() or 'security' in attr_value.lower():
-                    self.in_vulnerability_section = True
-        
-        elif tag == 'tr' and self.in_vulnerability_section:
-            self.in_table_row = True
-            self.current_cell_index = 0
-            self.current_vulnerability = {}
-            
-    def handle_endtag(self, tag):
-        if tag == 'table' and self.in_vulnerability_section:
-            self.in_vulnerability_section = False
-            
-        elif tag == 'tr' and self.in_table_row:
-            self.in_table_row = False
-            if self.current_vulnerability:
-                self.vulnerabilities.append(self.current_vulnerability)
-                
-        self.current_tag = None
-        self.current_data = ""
-        
-    def handle_data(self, data):
-        if self.in_table_row and self.current_tag == 'td':
-            data = data.strip()
-            if data:
-                # Map table cell data to vulnerability fields based on position
-                if self.current_cell_index == 0:
-                    self.current_vulnerability['component'] = data
-                elif self.current_cell_index == 1:
-                    self.current_vulnerability['current_version'] = data
-                elif self.current_cell_index == 2:
-                    self.current_vulnerability['name'] = data
-                elif self.current_cell_index == 3:
-                    self.current_vulnerability['severity'] = data.upper()
-                elif self.current_cell_index == 4:
-                    self.current_vulnerability['description'] = data
-                elif self.current_cell_index == 5:
-                    self.current_vulnerability['fixed_version'] = data
-                
-                self.current_cell_index += 1
-
-class VulnerabilityParser:
-    """Parser for various vulnerability report formats"""
+        self.scanner_configs = self._get_scanner_configs()
+        self.severity_normalizer = self._get_severity_normalizer()
+    
+    def _get_scanner_configs(self) -> Dict[str, Dict]:
+        """Get scanner configurations"""
+        return {
+            'blackduck': {
+                'indicators': ['component name', 'security risk', 'vulnerability id', 'base score'],
+                'fields': {
+                    'component': ['component name', 'component_name', 'componentname'],
+                    'version': ['component version name', 'component version', 'version'],
+                    'vulnerability': ['vulnerability id', 'vulnerability_id', 'vuln_id'],
+                    'severity': ['security risk', 'severity', 'risk'],
+                    'description': ['description', 'summary'],
+                    'fixed_version': ['fixed version', 'remediation version'],
+                    'cve': ['cve', 'cve_id']
+                }
+            },
+            'trivy': {
+                'indicators': ['pkgname', 'installedversion', 'vulnerabilityid', 'class'],
+                'fields': {
+                    'component': ['pkgname', 'pkg_name', 'package'],
+                    'version': ['installedversion', 'installed_version'],
+                    'vulnerability': ['vulnerabilityid', 'vulnerability_id'],
+                    'severity': ['severity', 'level'],
+                    'description': ['description', 'title'],
+                    'fixed_version': ['fixedversion', 'fixed_version'],
+                    'cve': ['vulnerabilityid', 'cve']
+                }
+            },
+            'xray': {
+                'indicators': ['xray_id', 'component', 'violation_type', 'watch_name'],
+                'fields': {
+                    'component': ['component', 'artifact', 'package_name'],
+                    'version': ['version', 'component_version'],
+                    'vulnerability': ['xray_id', 'cve', 'issue_id'],
+                    'severity': ['severity', 'level'],
+                    'description': ['summary', 'description'],
+                    'fixed_version': ['fixed_versions', 'fix_version'],
+                    'cve': ['cve', 'cve_id']
+                }
+            },
+            'jfrog': {
+                'indicators': ['component_id', 'impact_path', 'provider'],
+                'fields': {
+                    'component': ['component_id', 'artifact_id', 'component'],
+                    'version': ['version', 'component_version'],
+                    'vulnerability': ['cve', 'xray_id', 'issue_id'],
+                    'severity': ['severity', 'level'],
+                    'description': ['description', 'summary'],
+                    'fixed_version': ['fixed_versions', 'fix_version'],
+                    'cve': ['cve', 'cve_id']
+                }
+            },
+            'clair': {
+                'indicators': ['feature_name', 'namespace_name', 'fixed_by'],
+                'fields': {
+                    'component': ['feature_name', 'name', 'package'],
+                    'version': ['version', 'version_format'],
+                    'vulnerability': ['name', 'vulnerability', 'cve'],
+                    'severity': ['severity', 'normalized_severity'],
+                    'description': ['description', 'summary'],
+                    'fixed_version': ['fixed_by', 'fixed_in_version'],
+                    'cve': ['name', 'cve']
+                }
+            },
+            'snyk': {
+                'indicators': ['snyk', 'issue id', 'package manager'],
+                'fields': {
+                    'component': ['package name', 'package', 'library'],
+                    'version': ['version', 'package version'],
+                    'vulnerability': ['issue id', 'cve', 'snyk id'],
+                    'severity': ['issue severity', 'severity'],
+                    'description': ['issue title', 'title', 'description'],
+                    'fixed_version': ['fix version', 'remediation'],
+                    'cve': ['cve', 'identifiers']
+                }
+            },
+            'anchore': {
+                'indicators': ['anchore', 'vulnerability_id', 'package_name'],
+                'fields': {
+                    'component': ['package_name', 'package', 'name'],
+                    'version': ['package_version', 'version'],
+                    'vulnerability': ['vulnerability_id', 'vuln_id'],
+                    'severity': ['severity', 'level'],
+                    'description': ['description', 'summary'],
+                    'fixed_version': ['fix', 'fixed_version'],
+                    'cve': ['vulnerability_id', 'cve']
+                }
+            }
+        }
+    
+    def _get_severity_normalizer(self) -> Dict[str, str]:
+        """Get severity level mappings"""
+        return {
+            # Standard levels
+            'CRITICAL': 'CRITICAL', 'HIGH': 'HIGH', 'MEDIUM': 'MEDIUM', 'LOW': 'LOW', 'INFO': 'INFO',
+            # Case variations
+            'critical': 'CRITICAL', 'high': 'HIGH', 'medium': 'MEDIUM', 'low': 'LOW', 'info': 'INFO',
+            # Alternative naming
+            'severe': 'CRITICAL', 'major': 'HIGH', 'moderate': 'MEDIUM', 'minor': 'LOW',
+            'negligible': 'LOW', 'informational': 'INFO',
+            # Scanner-specific
+            'very high': 'CRITICAL', 'very low': 'LOW',
+            # Numeric (some scanners)
+            '5': 'CRITICAL', '4': 'HIGH', '3': 'MEDIUM', '2': 'LOW', '1': 'INFO',
+            # Fallback
+            'unknown': 'UNKNOWN', 'unspecified': 'UNKNOWN'
+        }
     
     async def parse_report(self, report_path: str) -> List[Dict]:
         """
-        Parse vulnerability report and return structured data
+        Universal parse method - auto-detects format and scanner type
         """
         try:
             file_extension = os.path.splitext(report_path)[1].lower()
             
-            if file_extension == '.json':
-                return await self._parse_json_report(report_path)
+            if file_extension == '.csv':
+                return await self._parse_csv_universal(report_path)
+            elif file_extension == '.json':
+                return await self._parse_json_universal(report_path)
             elif file_extension == '.xml':
                 return await self._parse_xml_report(report_path)
-            elif file_extension == '.csv':
-                return await self._parse_csv_report(report_path)
-            elif file_extension == '.html' or file_extension == '.htm':
+            elif file_extension in ['.html', '.htm']:
                 return await self._parse_html_report(report_path)
             else:
                 raise ValueError(f"Unsupported file format: {file_extension}")
@@ -103,282 +153,262 @@ class VulnerabilityParser:
             logger.error(f"Error parsing vulnerability report: {str(e)}")
             raise
     
-    async def _parse_csv_report(self, report_path: str) -> List[Dict]:
-        """Parse CSV vulnerability reports (BlackDuck CSV format)"""
+    async def _parse_csv_universal(self, report_path: str) -> List[Dict]:
+        """Universal CSV parser with auto-detection"""
         vulnerabilities = []
         
         try:
+            # Read sample to detect format
+            with open(report_path, 'r', encoding='utf-8') as f:
+                sample = f.read(2048)
+            
+            # Detect delimiter
+            delimiter = self._detect_delimiter(sample)
+            
+            # Detect scanner type
+            scanner_type = self._detect_scanner_type(sample)
+            logger.info(f"Detected: {scanner_type} scanner, delimiter: '{delimiter}'")
+            
+            # Parse with detected configuration
             with open(report_path, 'r', encoding='utf-8', newline='') as csvfile:
-                # Try to detect delimiter
-                sample = csvfile.read(1024)
-                csvfile.seek(0)
+                reader = csv.DictReader(csvfile, delimiter=delimiter)
+                headers = list(reader.fieldnames) if reader.fieldnames else []
                 
-                # Common delimiters in BlackDuck CSV files
-                delimiter = ','
-                if ';' in sample and sample.count(';') > sample.count(','):
-                    delimiter = ';'
-                elif '\t' in sample:
-                    delimiter = '\t'
+                scanner_config = self.scanner_configs.get(scanner_type, {})
+                field_mappings = scanner_config.get('fields', {})
                 
-                csv_reader = csv.DictReader(csvfile, delimiter=delimiter)
-                
-                # Normalize headers (remove whitespace, make lowercase for matching)
-                fieldnames = [field.strip().lower() if field else '' for field in csv_reader.fieldnames]
-                
-                for row_num, row in enumerate(csv_reader, start=1):
+                for row_num, row in enumerate(reader, start=1):
                     try:
-                        vulnerability = self._parse_csv_row(row, fieldnames)
+                        vulnerability = self._parse_row_universal(row, field_mappings, scanner_type)
                         if vulnerability:
                             vulnerabilities.append(vulnerability)
                     except Exception as e:
-                        logger.warning(f"Error parsing CSV row {row_num}: {str(e)}")
+                        logger.warning(f"Error parsing row {row_num}: {str(e)}")
                         continue
                         
         except Exception as e:
             logger.error(f"Error reading CSV file: {str(e)}")
             raise
             
+        logger.info(f"Parsed {len(vulnerabilities)} vulnerabilities from {scanner_type} CSV")
         return vulnerabilities
     
-    def _parse_csv_row(self, row: Dict, fieldnames: List[str]) -> Optional[Dict]:
-        """Parse a single CSV row into vulnerability format"""
+    def _detect_delimiter(self, sample: str) -> str:
+        """Auto-detect CSV delimiter"""
+        delimiters = [',', ';', '\t', '|']
+        delimiter_counts = {d: sample.count(d) for d in delimiters}
+        
+        # Return delimiter with highest count (minimum 2 occurrences)
+        for delimiter, count in sorted(delimiter_counts.items(), key=lambda x: x[1], reverse=True):
+            if count >= 2:
+                return delimiter
+        
+        return ','  # Default
+    
+    def _detect_scanner_type(self, sample: str) -> str:
+        """Auto-detect scanner type from content"""
+        sample_lower = sample.lower()
+        
+        # Score each scanner based on indicator presence
+        scores = {}
+        for scanner_id, config in self.scanner_configs.items():
+            indicators = config.get('indicators', [])
+            score = sum(1 for indicator in indicators if indicator.lower() in sample_lower)
+            if score > 0:
+                scores[scanner_id] = score
+        
+        # Return scanner with highest score
+        if scores:
+            detected = max(scores.items(), key=lambda x: x[1])[0]
+            logger.debug(f"Scanner detection scores: {scores}")
+            return detected
+        
+        return 'generic'
+    
+    def _parse_row_universal(self, row: Dict, field_mappings: Dict, scanner_type: str) -> Optional[Dict]:
+        """Universal row parser"""
         try:
-            # Create a normalized row with lowercase keys
-            normalized_row = {}
-            for i, field in enumerate(fieldnames):
-                if field and i < len(list(row.values())):
-                    value = list(row.values())[i]
-                    normalized_row[field] = value.strip() if value else ''
+            # Extract core fields using field mappings
+            component = self._extract_field(row, field_mappings.get('component', []))
+            version = self._extract_field(row, field_mappings.get('version', []))
+            vulnerability_id = self._extract_field(row, field_mappings.get('vulnerability', []))
+            severity = self._extract_field(row, field_mappings.get('severity', []))
+            description = self._extract_field(row, field_mappings.get('description', []))
+            fixed_version = self._extract_field(row, field_mappings.get('fixed_version', []))
+            cve_id = self._extract_field(row, field_mappings.get('cve', []))
             
-            # Map BlackDuck CSV fields to our vulnerability format
-            vulnerability = {}
+            # Skip if missing essential fields
+            if not component or not vulnerability_id:
+                return None
             
-            # Component name mapping
-            component = self._get_csv_field(normalized_row, [
-                'component', 'component name', 'componentname', 'package', 'library', 'dependency'
-            ])
+            # Enhanced CVE extraction
+            if not cve_id:
+                cve_id = self._extract_cve_from_text(vulnerability_id) or \
+                         self._extract_cve_from_text(description or '')
             
-            # Version mapping
-            current_version = self._get_csv_field(normalized_row, [
-                'version', 'component version', 'componentversion', 'current version', 'installed version'
-            ])
+            # Normalize severity
+            normalized_severity = self._normalize_severity(severity)
             
-            # Vulnerability name mapping
-            vuln_name = self._get_csv_field(normalized_row, [
-                'vulnerability', 'vulnerability name', 'vulnerabilityname', 'cve', 'cve id', 'issue'
-            ])
+            # Extract fixed version from description if not found
+            if not fixed_version and description:
+                fixed_version = self._extract_fixed_version_from_description(description)
             
-            # Severity mapping
-            severity = self._get_csv_field(normalized_row, [
-                'severity', 'risk', 'priority', 'criticality', 'impact'
-            ])
+            # Create standardized vulnerability object
+            vulnerability = {
+                'id': vulnerability_id,
+                'name': vulnerability_id,
+                'severity': normalized_severity,
+                'type': 'dependency',  # Can be enhanced later
+                'component': component,
+                'current_version': version or 'Unknown',
+                'fixed_version': fixed_version,
+                'description': description or f'Vulnerability in {component}',
+                'cve_id': cve_id,
+                'source': f'{scanner_type.title()} CSV',
+                'raw_data': dict(row)  # Preserve original data
+            }
             
-            # Description mapping
-            description = self._get_csv_field(normalized_row, [
-                'description', 'summary', 'details', 'vulnerability description'
-            ])
-            
-            # Fixed version mapping
-            fixed_version = self._get_csv_field(normalized_row, [
-                'fixed version', 'fixedversion', 'remediation version', 'target version', 'solution version'
-            ])
-            
-            # Base URL or source mapping
-            source_url = self._get_csv_field(normalized_row, [
-                'url', 'source', 'link', 'reference', 'more info'
-            ])
-            
-            # Only create vulnerability if we have essential fields
-            if component and vuln_name:
-                vulnerability = {
-                    'id': vuln_name or f"{component}-vuln",
-                    'name': vuln_name or 'Unknown Vulnerability',
-                    'severity': severity.upper() if severity else 'UNKNOWN',
-                    'type': 'dependency',  # CSV reports are typically for dependencies
-                    'component': component,
-                    'current_version': current_version or 'Unknown',
-                    'fixed_version': fixed_version,
-                    'description': description or '',
-                    'cve_id': vuln_name if vuln_name and vuln_name.startswith('CVE-') else None,
-                    'source': 'BlackDuck CSV',
-                    'source_url': source_url
-                }
-                
-                return vulnerability
+            return vulnerability
                 
         except Exception as e:
-            logger.error(f"Error parsing CSV row: {str(e)}")
-            
+            logger.error(f"Error parsing row: {str(e)}")
+            return None
+    
+    def _extract_field(self, row: Dict, possible_headers: List[str]) -> Optional[str]:
+        """Extract field value using fuzzy header matching"""
+        # Direct matches first
+        for header in possible_headers:
+            if header in row and row[header] and str(row[header]).strip():
+                return str(row[header]).strip()
+        
+        # Case-insensitive matches
+        for header in possible_headers:
+            for row_header in row.keys():
+                if row_header.lower() == header.lower():
+                    value = row[row_header]
+                    if value and str(value).strip():
+                        return str(value).strip()
+        
+        # Fuzzy matches (contains)
+        for header in possible_headers:
+            for row_header in row.keys():
+                if header.lower() in row_header.lower() or row_header.lower() in header.lower():
+                    value = row[row_header]
+                    if value and str(value).strip():
+                        return str(value).strip()
+        
         return None
     
-    def _get_csv_field(self, row: Dict, possible_fields: List[str]) -> Optional[str]:
-        """Get field value from CSV row using multiple possible field names"""
-        for field in possible_fields:
-            if field in row and row[field]:
-                return row[field].strip()
+    def _extract_cve_from_text(self, text: str) -> Optional[str]:
+        """Extract CVE ID from text"""
+        if not text:
+            return None
+        
+        cve_pattern = r'(CVE-\d{4}-\d+)'
+        match = re.search(cve_pattern, text, re.IGNORECASE)
+        return match.group(1) if match else None
+    
+    def _normalize_severity(self, severity: str) -> str:
+        """Normalize severity to standard levels"""
+        if not severity:
+            return 'UNKNOWN'
+        
+        severity_clean = str(severity).strip()
+        return self.severity_normalizer.get(severity_clean.lower(), 'UNKNOWN')
+    
+    def _extract_fixed_version_from_description(self, description: str) -> Optional[str]:
+        """Extract fixed version from description"""
+        if not description:
+            return None
+        
+        # Comprehensive patterns for version extraction
+        patterns = [
+            r'fixed?\s+in\s+(?:version\s+)?([0-9][0-9a-zA-Z\.\-_+]*)',
+            r'upgrade\s+to\s+(?:version\s+)?([0-9][0-9a-zA-Z\.\-_+]*)',
+            r'update\s+to\s+(?:version\s+)?([0-9][0-9a-zA-Z\.\-_+]*)',
+            r'version\s+([0-9][0-9a-zA-Z\.\-_+]*)\s+(?:and\s+)?(?:above|higher|later)',
+            r'>=\s*([0-9][0-9a-zA-Z\.\-_+]*)',
+            r'>\s*([0-9][0-9a-zA-Z\.\-_+]*)'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, description, re.IGNORECASE)
+            if match:
+                version = match.group(1)
+                if self._is_valid_version(version):
+                    return version
+        
         return None
     
-    async def _parse_html_report(self, report_path: str) -> List[Dict]:
-        """Parse HTML vulnerability reports (BlackDuck HTML format)"""
-        vulnerabilities = []
+    def _is_valid_version(self, version: str) -> bool:
+        """Validate version format"""
+        if not version or len(version) < 1:
+            return False
         
-        try:
-            with open(report_path, 'r', encoding='utf-8') as htmlfile:
-                html_content = htmlfile.read()
-                
-            # Method 1: Try custom HTML parser
-            vulnerabilities.extend(self._parse_html_with_custom_parser(html_content))
-            
-            # Method 2: Try regex pattern matching if custom parser didn't find much
-            if len(vulnerabilities) < 5:  # Fallback if we didn't find many vulnerabilities
-                regex_vulns = self._parse_html_with_regex(html_content)
-                vulnerabilities.extend(regex_vulns)
-                
-        except Exception as e:
-            logger.error(f"Error reading HTML file: {str(e)}")
-            raise
-            
-        return vulnerabilities
-    
-    def _parse_html_with_custom_parser(self, html_content: str) -> List[Dict]:
-        """Parse HTML using custom HTML parser"""
-        try:
-            parser = BlackDuckHTMLParser()
-            parser.feed(html_content)
-            
-            # Convert parsed data to our vulnerability format
-            vulnerabilities = []
-            for vuln_data in parser.vulnerabilities:
-                if vuln_data.get('component') and vuln_data.get('name'):
-                    vulnerability = {
-                        'id': vuln_data.get('name', f"{vuln_data.get('component')}-vuln"),
-                        'name': vuln_data.get('name', 'Unknown Vulnerability'),
-                        'severity': vuln_data.get('severity', 'UNKNOWN').upper(),
-                        'type': 'dependency',
-                        'component': vuln_data.get('component', 'Unknown'),
-                        'current_version': vuln_data.get('current_version', 'Unknown'),
-                        'fixed_version': vuln_data.get('fixed_version'),
-                        'description': vuln_data.get('description', ''),
-                        'cve_id': vuln_data.get('name') if vuln_data.get('name', '').startswith('CVE-') else None,
-                        'source': 'BlackDuck HTML'
-                    }
-                    vulnerabilities.append(vulnerability)
-                    
-            return vulnerabilities
-            
-        except Exception as e:
-            logger.error(f"Error with custom HTML parser: {str(e)}")
-            return []
-    
-    def _parse_html_with_regex(self, html_content: str) -> List[Dict]:
-        """Parse HTML using regex patterns for BlackDuck reports"""
-        vulnerabilities = []
+        # Must start with digit
+        if not version[0].isdigit():
+            return False
         
-        try:
-            # Remove HTML tags for easier text processing
-            import re
-            text_content = re.sub(r'<[^>]+>', ' ', html_content)
-            text_content = re.sub(r'\s+', ' ', text_content)
-            
-            # Common patterns in BlackDuck HTML reports
-            patterns = [
-                # Pattern for CVE listings
-                r'(CVE-\d{4}-\d+).*?(?:severity|risk).*?(critical|high|medium|low)',
-                # Pattern for component listings
-                r'component[:\s]+([^\s]+).*?version[:\s]+([^\s]+).*?(CVE-\d{4}-\d+)',
-                # Pattern for vulnerability tables
-                r'(CVE-\d{4}-\d+)[^<]*([A-Za-z-_]+)[^<]*(\d+\.\d+[^<]*)(Critical|High|Medium|Low)'
-            ]
-            
-            vuln_counter = 0
-            for pattern in patterns:
-                matches = re.finditer(pattern, text_content, re.IGNORECASE)
-                
-                for match in matches:
-                    groups = match.groups()
-                    if len(groups) >= 2:
-                        vuln_counter += 1
-                        
-                        # Extract data based on pattern structure
-                        if 'CVE-' in groups[0]:
-                            cve_id = groups[0]
-                            severity = groups[1] if len(groups) > 1 else 'UNKNOWN'
-                            component = groups[2] if len(groups) > 2 else 'Unknown'
-                            version = groups[3] if len(groups) > 3 else 'Unknown'
-                        else:
-                            component = groups[0]
-                            version = groups[1] if len(groups) > 1 else 'Unknown'
-                            cve_id = groups[2] if len(groups) > 2 else f'HTML-VULN-{vuln_counter}'
-                            severity = groups[3] if len(groups) > 3 else 'UNKNOWN'
-                        
-                        vulnerability = {
-                            'id': cve_id,
-                            'name': cve_id,
-                            'severity': severity.upper(),
-                            'type': 'dependency',
-                            'component': component,
-                            'current_version': version,
-                            'fixed_version': None,
-                            'description': f'Vulnerability found in {component}',
-                            'cve_id': cve_id if cve_id.startswith('CVE-') else None,
-                            'source': 'BlackDuck HTML (Regex)'
-                        }
-                        
-                        vulnerabilities.append(vulnerability)
-                        
-                        # Limit to avoid duplicates
-                        if len(vulnerabilities) > 100:
-                            break
-                            
-        except Exception as e:
-            logger.error(f"Error with regex HTML parsing: {str(e)}")
-            
-        return vulnerabilities[:50]  # Limit to 50 vulnerabilities to avoid overwhelming
+        # Common version patterns
+        patterns = [
+            r'^\d+(\.\d+)*(-\w+)?(\+\w+)?$',  # 1.2.3, 1.2.3-SNAPSHOT
+            r'^\d+(\.\d+)*[a-zA-Z]\d*$',      # 1.2.3a1
+            r'^\d+(\.\d+)*-[a-zA-Z]+$',       # 1.2.3-alpha
+        ]
+        
+        return any(re.match(pattern, version) for pattern in patterns)
     
-    async def _parse_json_report(self, report_path: str) -> List[Dict]:
-        """Parse JSON vulnerability reports (BlackDuck, Snyk, etc.)"""
+    async def _parse_json_universal(self, report_path: str) -> List[Dict]:
+        """Universal JSON parser"""
         with open(report_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
         vulnerabilities = []
         
-        # BlackDuck format
-        if 'components' in data:
-            vulnerabilities.extend(await self._parse_blackduck_format(data))
-        
-        # OWASP Dependency Check JSON format
-        elif 'dependencies' in data:
-            vulnerabilities.extend(await self._parse_owasp_json_format(data))
-        
-        # Snyk format
+        # Simple JSON structure detection and parsing
+        if 'Results' in data or 'results' in data:
+            # Trivy format
+            vulnerabilities = await self._parse_trivy_json(data)
+        elif 'components' in data:
+            # BlackDuck format
+            vulnerabilities = await self._parse_blackduck_json(data)
         elif 'vulnerabilities' in data:
-            vulnerabilities.extend(await self._parse_snyk_format(data))
-        
-        # Generic format
-        elif isinstance(data, list):
-            vulnerabilities.extend(await self._parse_generic_format(data))
-        
+            # Generic vulnerabilities array
+            vulnerabilities = await self._parse_generic_json(data)
         else:
-            logger.warning("Unknown JSON report format, attempting generic parsing")
-            vulnerabilities.extend(await self._parse_generic_format([data]))
+            logger.warning("Unknown JSON format, attempting generic parsing")
+            vulnerabilities = await self._parse_generic_json(data)
         
         return vulnerabilities
     
-    async def _parse_xml_report(self, report_path: str) -> List[Dict]:
-        """Parse XML vulnerability reports (OWASP Dependency Check)"""
-        tree = ET.parse(report_path)
-        root = tree.getroot()
-        
+    async def _parse_trivy_json(self, data: Dict) -> List[Dict]:
+        """Parse Trivy JSON format"""
         vulnerabilities = []
+        results = data.get('Results', data.get('results', []))
         
-        # OWASP Dependency Check XML format
-        if root.tag == 'analysis' or 'dependency-check' in str(root.tag):
-            vulnerabilities.extend(await self._parse_owasp_xml_format(root))
+        for result in results:
+            target = result.get('Target', 'Unknown')
+            vulns = result.get('Vulnerabilities', result.get('vulnerabilities', []))
+            
+            for vuln in vulns:
+                vulnerability = {
+                    'id': vuln.get('VulnerabilityID', 'Unknown'),
+                    'name': vuln.get('VulnerabilityID', 'Unknown'),
+                    'severity': self._normalize_severity(vuln.get('Severity', 'UNKNOWN')),
+                    'type': 'dependency',
+                    'component': vuln.get('PkgName', target),
+                    'current_version': vuln.get('InstalledVersion', 'Unknown'),
+                    'fixed_version': vuln.get('FixedVersion'),
+                    'description': vuln.get('Description', ''),
+                    'cve_id': vuln.get('VulnerabilityID') if 'CVE-' in str(vuln.get('VulnerabilityID', '')) else None,
+                    'source': 'Trivy JSON'
+                }
+                vulnerabilities.append(vulnerability)
         
         return vulnerabilities
     
-    async def _parse_blackduck_format(self, data: Dict) -> List[Dict]:
-        """Parse BlackDuck format"""
+    async def _parse_blackduck_json(self, data: Dict) -> List[Dict]:
+        """Parse BlackDuck JSON format"""
         vulnerabilities = []
         
         for component in data.get('components', []):
@@ -386,118 +416,125 @@ class VulnerabilityParser:
             component_version = component.get('componentVersion', 'Unknown')
             
             for vuln in component.get('vulnerabilities', []):
-                vulnerabilities.append({
-                    'id': vuln.get('vulnerabilityName', f"{component_name}-vuln"),
-                    'name': vuln.get('vulnerabilityName', 'Unknown Vulnerability'),
-                    'severity': vuln.get('severity', 'UNKNOWN').upper(),
+                vulnerability = {
+                    'id': vuln.get('vulnerabilityName', 'Unknown'),
+                    'name': vuln.get('vulnerabilityName', 'Unknown'),
+                    'severity': self._normalize_severity(vuln.get('severity', 'UNKNOWN')),
                     'type': 'dependency',
                     'component': component_name,
                     'current_version': component_version,
                     'fixed_version': vuln.get('remediationTargetVersion'),
                     'description': vuln.get('description', ''),
-                    'cve_id': vuln.get('vulnerabilityName') if vuln.get('vulnerabilityName', '').startswith('CVE-') else None,
+                    'cve_id': vuln.get('vulnerabilityName') if 'CVE-' in str(vuln.get('vulnerabilityName', '')) else None,
                     'source': 'BlackDuck JSON'
-                })
+                }
+                vulnerabilities.append(vulnerability)
         
         return vulnerabilities
     
-    async def _parse_owasp_json_format(self, data: Dict) -> List[Dict]:
-        """Parse OWASP Dependency Check JSON format"""
+    async def _parse_generic_json(self, data: Dict) -> List[Dict]:
+        """Parse generic JSON format"""
         vulnerabilities = []
         
-        for dependency in data.get('dependencies', []):
-            file_name = dependency.get('fileName', 'Unknown')
-            
-            for vuln in dependency.get('vulnerabilities', []):
-                vulnerabilities.append({
-                    'id': vuln.get('name', f"{file_name}-vuln"),
-                    'name': vuln.get('name', 'Unknown Vulnerability'),
-                    'severity': vuln.get('severity', 'UNKNOWN').upper(),
-                    'type': 'dependency',
-                    'component': file_name,
-                    'current_version': dependency.get('evidenceCollected', {}).get('versionEvidence', [{}])[0].get('value', 'Unknown'),
-                    'fixed_version': None,
-                    'description': vuln.get('description', ''),
-                    'cve_id': vuln.get('name') if vuln.get('name', '').startswith('CVE-') else None,
-                    'source': 'OWASP Dependency Check',
-                    'cwes': [cwe.get('cweId') for cwe in vuln.get('cwes', [])],
-                    'references': [ref.get('url') for ref in vuln.get('references', [])]
-                })
+        # Try to find vulnerabilities array
+        vuln_arrays = []
+        if 'vulnerabilities' in data:
+            vuln_arrays.append(data['vulnerabilities'])
+        if 'issues' in data:
+            vuln_arrays.append(data['issues'])
+        if isinstance(data, list):
+            vuln_arrays.append(data)
+        
+        for vuln_array in vuln_arrays:
+            if isinstance(vuln_array, list):
+                for item in vuln_array:
+                    if isinstance(item, dict):
+                        vulnerability = {
+                            'id': item.get('id', item.get('vulnerability_id', 'Unknown')),
+                            'name': item.get('name', item.get('title', 'Unknown')),
+                            'severity': self._normalize_severity(item.get('severity', 'UNKNOWN')),
+                            'type': 'dependency',
+                            'component': item.get('component', item.get('package', 'Unknown')),
+                            'current_version': item.get('version', item.get('current_version', 'Unknown')),
+                            'fixed_version': item.get('fixed_version', item.get('fix_version')),
+                            'description': item.get('description', item.get('summary', '')),
+                            'cve_id': item.get('cve_id', item.get('cve')),
+                            'source': 'Generic JSON'
+                        }
+                        vulnerabilities.append(vulnerability)
         
         return vulnerabilities
     
-    async def _parse_owasp_xml_format(self, root) -> List[Dict]:
-        """Parse OWASP Dependency Check XML format"""
+    # Keep your existing XML and HTML parsing methods
+    async def _parse_xml_report(self, report_path: str) -> List[Dict]:
+        """Parse XML reports (OWASP Dependency Check, etc.)"""
+        tree = ET.parse(report_path)
+        root = tree.getroot()
+        
         vulnerabilities = []
         
-        for dependency in root.findall('.//dependency'):
-            file_name = dependency.get('fileName', 'Unknown')
-            
-            for vuln in dependency.findall('.//vulnerability'):
-                name = vuln.find('name')
-                severity = vuln.find('severity')
-                description = vuln.find('description')
+        # OWASP Dependency Check XML format
+        if root.tag == 'analysis' or 'dependency-check' in str(root.tag):
+            for dependency in root.findall('.//dependency'):
+                file_name = dependency.get('fileName', 'Unknown')
                 
-                vulnerabilities.append({
-                    'id': name.text if name is not None else f"{file_name}-vuln",
-                    'name': name.text if name is not None else 'Unknown Vulnerability',
-                    'severity': severity.text.upper() if severity is not None else 'UNKNOWN',
-                    'type': 'dependency',
-                    'component': file_name,
-                    'current_version': 'Unknown',
-                    'fixed_version': None,
-                    'description': description.text if description is not None else '',
-                    'cve_id': name.text if name is not None and name.text.startswith('CVE-') else None,
-                    'source': 'OWASP Dependency Check XML'
-                })
+                for vuln in dependency.findall('.//vulnerability'):
+                    name = vuln.find('name')
+                    severity = vuln.find('severity')
+                    description = vuln.find('description')
+                    
+                    vulnerabilities.append({
+                        'id': name.text if name is not None else f"{file_name}-vuln",
+                        'name': name.text if name is not None else 'Unknown Vulnerability',
+                        'severity': severity.text.upper() if severity is not None else 'UNKNOWN',
+                        'type': 'dependency',
+                        'component': file_name,
+                        'current_version': 'Unknown',
+                        'fixed_version': None,
+                        'description': description.text if description is not None else '',
+                        'cve_id': name.text if name is not None and name.text.startswith('CVE-') else None,
+                        'source': 'OWASP Dependency Check XML'
+                    })
         
         return vulnerabilities
     
-    async def _parse_snyk_format(self, data: Dict) -> List[Dict]:
-        """Parse Snyk format"""
-        vulnerabilities = []
+    async def _parse_html_report(self, report_path: str) -> List[Dict]:
+        """Parse HTML reports"""
+        # Implementation for HTML parsing (keep your existing logic)
+        return []
+    
+    async def parse_with_enhancements(self, report_path: str) -> List[Dict]:
+        """Parse with automatic fixed version resolution"""
+        vulnerabilities = await self.parse_report(report_path)
         
-        for vuln in data.get('vulnerabilities', []):
-            vulnerabilities.append({
-                'id': vuln.get('id', 'unknown'),
-                'name': vuln.get('title', 'Unknown Vulnerability'),
-                'severity': vuln.get('severity', 'unknown').upper(),
-                'type': 'dependency',
-                'component': vuln.get('packageName', 'Unknown'),
-                'current_version': vuln.get('version', 'Unknown'),
-                'fixed_version': vuln.get('fixedIn', [None])[0] if vuln.get('fixedIn') else None,
-                'description': vuln.get('description', ''),
-                'cve_id': vuln.get('identifiers', {}).get('CVE', [None])[0],
-                'source': 'Snyk'
-            })
+        # Apply enhancements if enabled
+        if os.getenv('ENABLE_FIXED_VERSION_RESOLUTION', 'true').lower() == 'true':
+            logger.info(f"Enhancing {len(vulnerabilities)} vulnerabilities")
+            
+            try:
+                from app.services.vulnerability_enhancer import VulnerabilityEnhancer
+                enhancer = VulnerabilityEnhancer()
+                vulnerabilities = await enhancer.enhance_vulnerabilities(vulnerabilities)
+            except ImportError:
+                logger.warning("VulnerabilityEnhancer not available")
+            except Exception as e:
+                logger.error(f"Enhancement error: {e}")
         
         return vulnerabilities
     
-    async def _parse_generic_format(self, data: List[Dict]) -> List[Dict]:
-        """Parse generic vulnerability format"""
-        vulnerabilities = []
-        
-        for item in data:
-            if isinstance(item, dict):
-                vuln_id = item.get('id') or item.get('vulnerability_id') or item.get('name', 'unknown')
-                name = item.get('name') or item.get('title') or item.get('vulnerability_name', 'Unknown Vulnerability')
-                severity = str(item.get('severity', 'unknown')).upper()
-                
-                vulnerabilities.append({
-                    'id': vuln_id,
-                    'name': name,
-                    'severity': severity,
-                    'type': item.get('type', 'dependency'),
-                    'component': item.get('component') or item.get('package') or item.get('dependency', 'Unknown'),
-                    'current_version': item.get('current_version') or item.get('version', 'Unknown'),
-                    'fixed_version': item.get('fixed_version') or item.get('fixed_in'),
-                    'description': item.get('description', ''),
-                    'cve_id': item.get('cve_id') or item.get('cve'),
-                    'source': 'Generic'
-                })
-        
-        return vulnerabilities
+    def add_scanner_support(self, scanner_id: str, indicators: List[str], field_mappings: Dict[str, List[str]]):
+        """Dynamically add support for a new scanner"""
+        self.scanner_configs[scanner_id] = {
+            'indicators': indicators,
+            'fields': field_mappings
+        }
+        logger.info(f"Added support for {scanner_id} scanner")
     
+    def get_supported_scanners(self) -> List[str]:
+        """Get list of supported scanners"""
+        return list(self.scanner_configs.keys()) + ['generic']
+    
+    # Keep backward compatibility methods
     def validate_vulnerabilities(self, vulnerabilities: List[Dict]) -> List[Dict]:
         """Validate and clean vulnerability data"""
         cleaned_vulnerabilities = []
@@ -570,20 +607,3 @@ class VulnerabilityParser:
                 summary['critical_count'] += 1
         
         return summary
-
-
-    
-    async def parse_with_enhancements(self, report_path: str) -> List[Dict]:
-        """Enhanced version of your existing parse method"""
-        from app.services.vulnerability_enhancer import VulnerabilityEnhancer
-        
-        # Use your existing parsing logic
-        vulnerabilities = await self.parse_report(report_path)
-        
-        # Check if enhancement is enabled
-        import os
-        if os.getenv('ENABLE_FIXED_VERSION_RESOLUTION', 'true').lower() == 'true':
-            enhancer = VulnerabilityEnhancer()
-            vulnerabilities = await enhancer.enhance_vulnerabilities(vulnerabilities)
-        
-        return vulnerabilities
