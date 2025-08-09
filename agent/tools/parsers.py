@@ -12,6 +12,8 @@ import os
 import re
 from html.parser import HTMLParser
 import io
+from app.services.vulnerability_enhancer import VulnerabilityEnhancer
+
 
 logger = logging.getLogger(__name__)
 
