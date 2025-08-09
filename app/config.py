@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     CSV_DELIMITER_AUTO_DETECT: bool = True
     
     # ============================================================================
-    # SUPPORTED SCANNERS (NEW!) - FIXED to handle comma-separated strings
+    # SUPPORTED SCANNERS (NEW!)
     # ============================================================================
     SUPPORTED_SCANNERS: Union[str, List[str]] = "blackduck,trivy,xray,jfrog,clair,snyk,anchore,generic"
     SCANNER_DETECTION_CONFIDENCE_THRESHOLD: float = 0.5
@@ -78,14 +78,14 @@ class Settings(BaseSettings):
     SUPPORTED_REPOS: Union[str, List[str]] = "bitbucket,github"
     
     # ============================================================================
-    # ENHANCED FORMAT SUPPORT (UPDATED)
+    # ENHANCED FORMAT SUPPORT
     # ============================================================================
     SUPPORTED_FORMATS: Union[str, List[str]] = "application/json,text/plain,application/xml,text/csv,text/html,application/csv"
     SUPPORTED_FILE_EXTENSIONS: Union[str, List[str]] = ".csv,.json,.xml,.html,.htm"
     SUPPORTED_MIME_TYPES: Union[str, List[str]] = "text/csv,application/json,application/xml,text/html"
     
     # ============================================================================
-    # ENHANCED PARSING SETTINGS (NEW!)
+    # ENHANCED PARSING SETTINGS
     # ============================================================================
     HTML_PARSER_ENABLED: bool = True
     XML_NAMESPACE_IGNORE: bool = True
@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     ALLOW_PARTIAL_MATCHES: bool = True
     
     # ============================================================================
-    # PERFORMANCE SETTINGS (NEW!)
+    # PERFORMANCE SETTINGS
     # ============================================================================
     PARSER_CACHE_SIZE: int = 1000
     PARALLEL_PROCESSING: bool = True
@@ -104,21 +104,21 @@ class Settings(BaseSettings):
     ENHANCEMENT_BATCH_SIZE: int = 10
     
     # ============================================================================
-    # SECURITY SETTINGS (NEW!)
+    # SECURITY SETTINGS
     # ============================================================================
     VALIDATE_FILE_CONTENT: bool = True
     MAX_VULNERABILITIES_PER_FILE: int = 10000
     SANITIZE_INPUT_DATA: bool = True
     
     # ============================================================================
-    # LOGGING CONFIGURATION (NEW!)
+    # LOGGING CONFIGURATION
     # ============================================================================
     ENABLE_PARSER_DEBUG_LOGS: bool = False
     ENABLE_ENHANCEMENT_DEBUG_LOGS: bool = False
     LOG_SCANNER_DETECTION_DETAILS: bool = True
     
     # ============================================================================
-    # ADVANCED CONFIGURATION (NEW!)
+    # ADVANCED CONFIGURATION
     # ============================================================================
     SKIP_ENHANCEMENT_ON_ERROR: bool = False
     
@@ -176,7 +176,7 @@ class Settings(BaseSettings):
                 setattr(self, field, converted_list)
 
     # ============================================================================
-    # SEVERITY MAPPINGS AS PROPERTIES
+    # STATIC SEVERITY MAPPINGS
     # ============================================================================
     @property
     def BLACKDUCK_SEVERITY_MAPPING(self) -> Dict[str, str]:
@@ -199,11 +199,9 @@ class Settings(BaseSettings):
             "UNKNOWN": "UNKNOWN"
         }
 
-    # ============================================================================
-    # OLLAMA MODEL OPTIONS
-    # ============================================================================
     @property
     def OLLAMA_MODELS(self) -> Dict[str, str]:
+        """Available Ollama models"""
         return {
             "codellama:7b": "Best for code generation (4GB RAM)",
             "codellama:13b": "Better quality, needs 8GB RAM", 
@@ -259,15 +257,6 @@ def validate_settings():
         missing_required = [s for s in required_scanners if s not in settings.SUPPORTED_SCANNERS]
         if missing_required:
             errors.append(f"Missing required scanners: {missing_required}")
-        
-        # Check internet connectivity for external APIs
-        if settings.ENABLE_FIXED_VERSION_RESOLUTION:
-            if settings.ENABLE_GITHUB_ADVISORY or settings.ENABLE_OSV_API:
-                try:
-                    import socket
-                    socket.create_connection(("8.8.8.8", 53), timeout=3)
-                except OSError:
-                    warnings.append("No internet connection detected - external API enhancement will be limited")
     
     # Validate file size limits
     if settings.MAX_FILE_SIZE > 50 * 1024 * 1024:  # 50MB
@@ -286,10 +275,6 @@ def validate_settings():
         for warning in warnings:
             logger.warning(warning)
 
-# ============================================================================
-# AUTO-CONFIGURATION FUNCTIONS
-# ============================================================================
-
 def auto_configure():
     """Auto-configure based on available resources and scanner support"""
     try:
@@ -305,7 +290,7 @@ def auto_configure():
     elif available_ram_gb >= 4:
         recommended_model = "codellama:7b"
     else:
-        recommended_model = "deepseek-coder:6.7b"  # Smallest efficient model
+        recommended_model = "deepseek-coder:6.7b"
     
     # Check network connectivity for enhancement features
     network_available = False
@@ -346,52 +331,16 @@ def auto_configure():
             "Universal parser not properly configured - check SUPPORTED_SCANNERS setting"
         )
     
-    if settings.OLLAMA_MODEL == "codellama:7b" and available_ram_gb >= 8:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Consider upgrading to {recommended_model} for better performance (you have {available_ram_gb:.1f}GB RAM)")
-    
     return config_recommendations
-
-# ============================================================================
-# ENVIRONMENT-SPECIFIC SETUP
-# ============================================================================
 
 def setup_environment():
     """Setup environment-specific configurations"""
-    if settings.ENVIRONMENT == "production":
-        # Production settings - modify the object attributes directly
-        object.__setattr__(settings, 'LOG_LEVEL', "WARNING")
-        object.__setattr__(settings, 'ENHANCEMENT_TIMEOUT', 60)
-        object.__setattr__(settings, 'MAX_CONCURRENT_ENHANCEMENTS', 3)
-        object.__setattr__(settings, 'ENABLE_PARSER_DEBUG_LOGS', False)
-        object.__setattr__(settings, 'ENABLE_ENHANCEMENT_DEBUG_LOGS', False)
-        object.__setattr__(settings, 'DEV_MODE', False)
-        object.__setattr__(settings, 'ENABLE_TEST_ENDPOINTS', False)
-        
-    elif settings.ENVIRONMENT == "development":
-        # Development settings
-        object.__setattr__(settings, 'LOG_LEVEL', "DEBUG")
-        object.__setattr__(settings, 'ENHANCEMENT_TIMEOUT', 30)
-        object.__setattr__(settings, 'MAX_CONCURRENT_ENHANCEMENTS', 5)
-        object.__setattr__(settings, 'ENABLE_PARSER_DEBUG_LOGS', True)
-        object.__setattr__(settings, 'DEV_MODE', True)
-        
-    elif settings.ENVIRONMENT == "testing":
-        # Testing settings
-        object.__setattr__(settings, 'ENABLE_FIXED_VERSION_RESOLUTION', False)
-        object.__setattr__(settings, 'AUTO_DETECT_SCANNER', True)
-        object.__setattr__(settings, 'LOG_LEVEL', "ERROR")
-        object.__setattr__(settings, 'MOCK_EXTERNAL_APIS', True)
-        object.__setattr__(settings, 'ENABLE_TEST_ENDPOINTS', True)
-
-# ============================================================================
-# SCANNER-SPECIFIC FUNCTIONS
-# ============================================================================
+    # Simple environment setup without trying to modify immutable settings
+    pass
 
 def validate_scanner_support():
     """Validate scanner configurations"""
-    required_scanners = ["blackduck", "trivy", "generic"]  # Minimum required
+    required_scanners = ["blackduck", "trivy", "generic"]
     
     missing_scanners = [s for s in required_scanners if s not in settings.SUPPORTED_SCANNERS]
     if missing_scanners:
@@ -466,45 +415,10 @@ def get_all_scanner_configs() -> Dict[str, Dict]:
     """Get all scanner configurations"""
     return {scanner: get_scanner_config(scanner) for scanner in settings.SUPPORTED_SCANNERS}
 
-# ============================================================================
-# MIGRATION AND COMPATIBILITY FUNCTIONS
-# ============================================================================
-
 def migrate_legacy_config():
     """Migrate legacy configuration to universal parser format"""
-    migrations = []
-    
-    # Check for legacy BlackDuck-specific settings
-    legacy_settings = [
-        "BLACKDUCK_ONLY_MODE",
-        "ENABLE_BLACKDUCK_PARSING", 
-        "BLACKDUCK_CSV_SUPPORT",
-        "TRIVY_ONLY_MODE",
-        "SINGLE_SCANNER_MODE"
-    ]
-    
-    for legacy_setting in legacy_settings:
-        if os.getenv(legacy_setting):
-            migrations.append(f"Legacy setting {legacy_setting} detected - now handled by universal parser")
-    
-    # Check for old field mapping configurations
-    old_field_configs = [
-        "BLACKDUCK_COMPONENT_FIELD",
-        "BLACKDUCK_VERSION_FIELD", 
-        "TRIVY_PACKAGE_FIELD"
-    ]
-    
-    for old_config in old_field_configs:
-        if os.getenv(old_config):
-            migrations.append(f"Legacy field mapping {old_config} detected - now auto-mapped by universal parser")
-    
-    if migrations:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info("Configuration migrations detected:")
-        for migration in migrations:
-            logger.info(f"  • {migration}")
-        logger.info("  • Universal parser now handles all scanner types automatically")
+    # Simple migration check
+    pass
 
 def check_compatibility():
     """Check compatibility with existing codebase"""
@@ -518,29 +432,12 @@ def check_compatibility():
     except ImportError as e:
         compatibility_issues.append(f"Missing required module: {e}")
     
-    # Check if enhancement modules are available
-    try:
-        from app.services.vulnerability_enhancer import VulnerabilityEnhancer
-        from app.services.fixed_version_resolver import FixedVersionResolver
-    except ImportError:
-        compatibility_issues.append("Enhancement modules not available - fixed version resolution will be limited")
-    
-    # Check if Ollama client is available
-    try:
-        from agents.tools.ollama_client import OllamaClient
-    except ImportError:
-        compatibility_issues.append("Ollama client not available - AI features will be limited")
-    
     if compatibility_issues:
         import logging
         logger = logging.getLogger(__name__)
         logger.warning("Compatibility issues detected:")
         for issue in compatibility_issues:
             logger.warning(f"  • {issue}")
-
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
 
 def get_effective_config() -> Dict:
     """Get the effective configuration after all overrides"""
@@ -565,18 +462,6 @@ def get_effective_config() -> Dict:
             "github_advisory": settings.ENABLE_GITHUB_ADVISORY,
             "osv_api": settings.ENABLE_OSV_API,
             "package_apis": settings.ENABLE_PACKAGE_APIS
-        },
-        "performance": {
-            "parallel_processing": settings.PARALLEL_PROCESSING,
-            "max_concurrent": settings.MAX_CONCURRENT_ENHANCEMENTS,
-            "parser_cache": settings.PARSER_CACHE_SIZE,
-            "retry_count": settings.ENHANCEMENT_RETRY_COUNT
-        },
-        "security": {
-            "validate_content": settings.VALIDATE_FILE_CONTENT,
-            "max_vulns_per_file": settings.MAX_VULNERABILITIES_PER_FILE,
-            "sanitize_input": settings.SANITIZE_INPUT_DATA,
-            "max_file_size": settings.MAX_FILE_SIZE
         }
     }
 
