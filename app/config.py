@@ -104,36 +104,6 @@ class Settings(BaseSettings):
     ENHANCEMENT_BATCH_SIZE: int = 10
     
     # ============================================================================
-    # SCANNER-SPECIFIC SETTINGS (NEW!)
-    # ============================================================================
-    BLACKDUCK_SEVERITY_MAPPING_CRITICAL: str = "CRITICAL"
-    BLACKDUCK_SEVERITY_MAPPING_HIGH: str = "HIGH"
-    BLACKDUCK_SEVERITY_MAPPING_MEDIUM: str = "MEDIUM"
-    BLACKDUCK_SEVERITY_MAPPING_LOW: str = "LOW"
-    
-    TRIVY_SEVERITY_MAPPING_CRITICAL: str = "CRITICAL"
-    TRIVY_SEVERITY_MAPPING_HIGH: str = "HIGH"
-    TRIVY_SEVERITY_MAPPING_MEDIUM: str = "MEDIUM"
-    TRIVY_SEVERITY_MAPPING_LOW: str = "LOW"
-    TRIVY_SEVERITY_MAPPING_UNKNOWN: str = "UNKNOWN"
-    
-    # ============================================================================
-    # ENHANCEMENT API ENDPOINTS
-    # ============================================================================
-    GITHUB_API_BASE: str = "https://api.github.com"
-    OSV_API_BASE: str = "https://api.osv.dev"
-    NPM_REGISTRY_BASE: str = "https://registry.npmjs.org"
-    PYPI_API_BASE: str = "https://pypi.org/pypi"
-    MAVEN_SEARCH_BASE: str = "https://search.maven.org"
-    
-    # ============================================================================
-    # RATE LIMITING FOR EXTERNAL APIS
-    # ============================================================================
-    GITHUB_API_RATE_LIMIT: int = 5000
-    OSV_API_RATE_LIMIT: int = 1000
-    PACKAGE_API_RATE_LIMIT: int = 100
-    
-    # ============================================================================
     # SECURITY SETTINGS (NEW!)
     # ============================================================================
     VALIDATE_FILE_CONTENT: bool = True
@@ -163,6 +133,22 @@ class Settings(BaseSettings):
     METRICS_PORT: int = 8001
     HEALTH_CHECK_INTERVAL: int = 30
     
+    # ============================================================================
+    # ENHANCEMENT API ENDPOINTS
+    # ============================================================================
+    GITHUB_API_BASE: str = "https://api.github.com"
+    OSV_API_BASE: str = "https://api.osv.dev"
+    NPM_REGISTRY_BASE: str = "https://registry.npmjs.org"
+    PYPI_API_BASE: str = "https://pypi.org/pypi"
+    MAVEN_SEARCH_BASE: str = "https://search.maven.org"
+    
+    # ============================================================================
+    # RATE LIMITING FOR EXTERNAL APIS
+    # ============================================================================
+    GITHUB_API_RATE_LIMIT: int = 5000
+    OSV_API_RATE_LIMIT: int = 1000
+    PACKAGE_API_RATE_LIMIT: int = 100
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
@@ -171,7 +157,6 @@ class Settings(BaseSettings):
         super().__init__(**kwargs)
         # Convert comma-separated strings to lists after initialization
         self._convert_string_lists()
-        self._create_severity_mappings()
 
     def _convert_string_lists(self):
         """Convert comma-separated strings to lists"""
@@ -190,21 +175,28 @@ class Settings(BaseSettings):
                 converted_list = [item.strip() for item in value.split(',') if item.strip()]
                 setattr(self, field, converted_list)
 
-    def _create_severity_mappings(self):
-        """Create severity mapping dictionaries from individual settings"""
-        self.BLACKDUCK_SEVERITY_MAPPING = {
-            "CRITICAL": self.BLACKDUCK_SEVERITY_MAPPING_CRITICAL,
-            "HIGH": self.BLACKDUCK_SEVERITY_MAPPING_HIGH,
-            "MEDIUM": self.BLACKDUCK_SEVERITY_MAPPING_MEDIUM,
-            "LOW": self.BLACKDUCK_SEVERITY_MAPPING_LOW
+    # ============================================================================
+    # SEVERITY MAPPINGS AS PROPERTIES
+    # ============================================================================
+    @property
+    def BLACKDUCK_SEVERITY_MAPPING(self) -> Dict[str, str]:
+        """BlackDuck severity mapping"""
+        return {
+            "CRITICAL": "CRITICAL",
+            "HIGH": "HIGH",
+            "MEDIUM": "MEDIUM",
+            "LOW": "LOW"
         }
-        
-        self.TRIVY_SEVERITY_MAPPING = {
-            "CRITICAL": self.TRIVY_SEVERITY_MAPPING_CRITICAL,
-            "HIGH": self.TRIVY_SEVERITY_MAPPING_HIGH,
-            "MEDIUM": self.TRIVY_SEVERITY_MAPPING_MEDIUM,
-            "LOW": self.TRIVY_SEVERITY_MAPPING_LOW,
-            "UNKNOWN": self.TRIVY_SEVERITY_MAPPING_UNKNOWN
+    
+    @property
+    def TRIVY_SEVERITY_MAPPING(self) -> Dict[str, str]:
+        """Trivy severity mapping"""
+        return {
+            "CRITICAL": "CRITICAL",
+            "HIGH": "HIGH",
+            "MEDIUM": "MEDIUM",
+            "LOW": "LOW",
+            "UNKNOWN": "UNKNOWN"
         }
 
     # ============================================================================
@@ -331,32 +323,11 @@ def auto_configure():
         len(settings.SUPPORTED_SCANNERS) > 0
     )
     
-    # Check Ollama status
-    ollama_available = False
-    try:
-        import aiohttp
-        import asyncio
-        async def check_ollama():
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=aiohttp.ClientTimeout(total=5)) as response:
-                        return response.status == 200
-            except:
-                return False
-        
-        try:
-            ollama_available = asyncio.run(check_ollama())
-        except:
-            ollama_available = False
-    except:
-        pass
-    
     config_recommendations = {
         "recommended_model": recommended_model,
         "available_ram_gb": available_ram_gb,
         "current_model": settings.OLLAMA_MODEL,
         "network_available": network_available,
-        "ollama_available": ollama_available,
         "enhancement_enabled": settings.ENABLE_FIXED_VERSION_RESOLUTION,
         "universal_parser_enabled": settings.ENABLE_UNIVERSAL_PARSING,
         "parser_config_valid": parser_config_valid,
@@ -375,11 +346,6 @@ def auto_configure():
             "Universal parser not properly configured - check SUPPORTED_SCANNERS setting"
         )
     
-    if not ollama_available and settings.USE_OLLAMA:
-        config_recommendations["recommendations"].append(
-            "Ollama not running - start with 'ollama serve' command"
-        )
-    
     if settings.OLLAMA_MODEL == "codellama:7b" and available_ram_gb >= 8:
         import logging
         logger = logging.getLogger(__name__)
@@ -394,30 +360,30 @@ def auto_configure():
 def setup_environment():
     """Setup environment-specific configurations"""
     if settings.ENVIRONMENT == "production":
-        # Production settings
-        settings.LOG_LEVEL = "WARNING"
-        settings.ENHANCEMENT_TIMEOUT = 60
-        settings.MAX_CONCURRENT_ENHANCEMENTS = 3  # Conservative for production
-        settings.ENABLE_PARSER_DEBUG_LOGS = False
-        settings.ENABLE_ENHANCEMENT_DEBUG_LOGS = False
-        settings.DEV_MODE = False
-        settings.ENABLE_TEST_ENDPOINTS = False
+        # Production settings - modify the object attributes directly
+        object.__setattr__(settings, 'LOG_LEVEL', "WARNING")
+        object.__setattr__(settings, 'ENHANCEMENT_TIMEOUT', 60)
+        object.__setattr__(settings, 'MAX_CONCURRENT_ENHANCEMENTS', 3)
+        object.__setattr__(settings, 'ENABLE_PARSER_DEBUG_LOGS', False)
+        object.__setattr__(settings, 'ENABLE_ENHANCEMENT_DEBUG_LOGS', False)
+        object.__setattr__(settings, 'DEV_MODE', False)
+        object.__setattr__(settings, 'ENABLE_TEST_ENDPOINTS', False)
         
     elif settings.ENVIRONMENT == "development":
         # Development settings
-        settings.LOG_LEVEL = "DEBUG"
-        settings.ENHANCEMENT_TIMEOUT = 30
-        settings.MAX_CONCURRENT_ENHANCEMENTS = 5
-        settings.ENABLE_PARSER_DEBUG_LOGS = True
-        settings.DEV_MODE = True
+        object.__setattr__(settings, 'LOG_LEVEL', "DEBUG")
+        object.__setattr__(settings, 'ENHANCEMENT_TIMEOUT', 30)
+        object.__setattr__(settings, 'MAX_CONCURRENT_ENHANCEMENTS', 5)
+        object.__setattr__(settings, 'ENABLE_PARSER_DEBUG_LOGS', True)
+        object.__setattr__(settings, 'DEV_MODE', True)
         
     elif settings.ENVIRONMENT == "testing":
         # Testing settings
-        settings.ENABLE_FIXED_VERSION_RESOLUTION = False  # Disable external calls in tests
-        settings.AUTO_DETECT_SCANNER = True  # Keep auto-detection for testing
-        settings.LOG_LEVEL = "ERROR"
-        settings.MOCK_EXTERNAL_APIS = True
-        settings.ENABLE_TEST_ENDPOINTS = True
+        object.__setattr__(settings, 'ENABLE_FIXED_VERSION_RESOLUTION', False)
+        object.__setattr__(settings, 'AUTO_DETECT_SCANNER', True)
+        object.__setattr__(settings, 'LOG_LEVEL', "ERROR")
+        object.__setattr__(settings, 'MOCK_EXTERNAL_APIS', True)
+        object.__setattr__(settings, 'ENABLE_TEST_ENDPOINTS', True)
 
 # ============================================================================
 # SCANNER-SPECIFIC FUNCTIONS
